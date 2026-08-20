@@ -59,6 +59,35 @@ def parse_listings_from_page(soup):
         if "display: none" in style or "display:none" in style:
             continue
 
+        # Extract URL path for parameter extraction
+        link_tag = cells[2].find("a")
+        relative_href = link_tag["href"] if link_tag else ""
+
+        # Extract listing ID from the URL (e.g., '/msg/lv/.../bebpge.html' -> 'bebpge')
+        listing_id = ""
+        if relative_href:
+            id_match = re.search(r"/([^/]+)\.html$", relative_href)
+            if id_match:
+                listing_id = id_match.group(1)
+
+        if not listing_id:
+            row_id = row.get("id", "")
+            listing_id = row_id.replace("tr_", "")
+
+        # Extract category, subcategory, city, and district from URL path
+        # Example URL: '/msg/lv/real-estate/flats/riga/centre/bebpge.html'
+        category = ""
+        subcategory = ""
+        city = ""
+        district = ""
+        if relative_href:
+            geo_match = re.search(r"/([^/]+)/([^/]+)/([^/]+)/([^/]+)/[^/]+\.html$", relative_href)
+            if geo_match:
+                category = geo_match.group(1)
+                subcategory = geo_match.group(2)
+                city = geo_match.group(3)
+                district = geo_match.group(4)
+
         # Extract cell values
         description = cells[2].text.strip()
         address = cells[3].text.strip()
@@ -69,13 +98,13 @@ def parse_listings_from_page(soup):
         price_sqm = cells[8].text.strip()
         price_month = cells[9].text.strip()
 
-        # Extract URL
-        link_tag = cells[2].find("a")
-        relative_href = link_tag["href"] if link_tag else ""
-        full_url = f"https://www.ss.com{relative_href}" if relative_href else ""
-
-        # Construct individual dictionary item
+        # Construct dictionary
         listings.append({
+            "id": listing_id,
+            "category": category,
+            "subcategory": subcategory,
+            "city": city,
+            "district": district,
             "address": address,
             "rooms": rooms,
             "area_sqm": area,
@@ -83,8 +112,7 @@ def parse_listings_from_page(soup):
             "series": series,
             "price_per_sqm": price_sqm,
             "price_monthly": price_month,
-            "description": description,
-            "url": full_url
+            "description": description
         })
 
     return listings
@@ -114,7 +142,7 @@ def run_scraper():
         if page > 1:
             res = session.get(page_url)
             if res.status_code != 200:
-                print(f"Skipping page {page} (status code {res.status_code})")
+                print(f"Skipping page {page}  (status code {res.status_code})")
                 continue
             soup = BeautifulSoup(res.text, "html.parser")
 
@@ -122,7 +150,6 @@ def run_scraper():
         all_listings.extend(page_data)
         print(f"  -> Found {len(page_data)} listings.")
 
-        # Politeness delay between requests
         if page < total_pages:
             time.sleep(random.uniform(1.5, 3.0))
 
