@@ -1,0 +1,12 @@
+__pycache__/config.cpython-314.pyc
+__pycache__/db.cpython-314.pyc
+__pycache__/scraper.cpython-314.pyc
+__pycache__/telegram.cpython-314.pyc
+.vscode/settings.json
+tests/__pycache__/test_config.cpython-314-pytest-9.1.1.pyc
+tests/__pycache__/test_db.cpython-314-pytest-9.1.1.pyc
+tests/__pycache__/test_scraper.cpython-314-pytest-9.1.1.pyc
+main.py
+ss_listings.db
+ss_com_listings.json
+.directory

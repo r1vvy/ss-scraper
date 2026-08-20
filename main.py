@@ -1,166 +1,75 @@
-import re
-import time
 import random
-import json
+import threading
+import time
+
 import requests
-from bs4 import BeautifulSoup
 
-# Base URL for the category
-BASE_URL = "https://www.ss.com/lv/real-estate/flats/riga/centre/hand_over/"
-
-# Request headers to mimic a regular browser
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept-Language": "lv,en-US;q=0.9,en;q=0.8",
-}
-
-
-def get_total_pages(soup):
-    """Extracts the total page count from pagination elements."""
-    prev_link = soup.find("a", attrs={"name": "nav_id", "rel": "prev"})
-    if prev_link and "href" in prev_link.attrs:
-        match = re.search(r"page(\d+)\.html", prev_link["href"])
-        if match:
-            return int(match.group(1))
-
-    nav_links = soup.find_all("a", class_="navi")
-    page_numbers = []
-    for link in nav_links:
-        match = re.search(r"page(\d+)\.html", link.get("href", ""))
-        if match:
-            page_numbers.append(int(match.group(1)))
-
-    return max(page_numbers) if page_numbers else 1
-
-
-def parse_listings_from_page(soup):
-    """Finds the main listings table and parses valid listing rows."""
-    listings = []
-
-    headline_row = soup.find("tr", id="head_line")
-    if not headline_row:
-        return listings
-
-    target_table = headline_row.find_parent("table")
-    if not target_table:
-        return listings
-
-    potential_rows = target_table.select("tr[id^='tr_']")
-
-    for row in potential_rows:
-        cells = row.find_all("td")
-
-        # Skip ad rows (valid listing rows have 10 data cells)
-        if len(cells) < 10:
-            continue
-
-        # Skip hidden rows
-        style = row.get("style", "").lower()
-        if "display: none" in style or "display:none" in style:
-            continue
-
-        # Extract URL path for parameter extraction
-        link_tag = cells[2].find("a")
-        relative_href = link_tag["href"] if link_tag else ""
-
-        # Extract listing ID from the URL (e.g., '/msg/lv/.../bebpge.html' -> 'bebpge')
-        listing_id = ""
-        if relative_href:
-            id_match = re.search(r"/([^/]+)\.html$", relative_href)
-            if id_match:
-                listing_id = id_match.group(1)
-
-        if not listing_id:
-            row_id = row.get("id", "")
-            listing_id = row_id.replace("tr_", "")
-
-        # Extract category, subcategory, city, and district from URL path
-        # Example URL: '/msg/lv/real-estate/flats/riga/centre/bebpge.html'
-        category = ""
-        subcategory = ""
-        city = ""
-        district = ""
-        if relative_href:
-            geo_match = re.search(r"/([^/]+)/([^/]+)/([^/]+)/([^/]+)/[^/]+\.html$", relative_href)
-            if geo_match:
-                category = geo_match.group(1)
-                subcategory = geo_match.group(2)
-                city = geo_match.group(3)
-                district = geo_match.group(4)
-
-        # Extract cell values
-        description = cells[2].text.strip()
-        address = cells[3].text.strip()
-        rooms = cells[4].text.strip()
-        area = cells[5].text.strip()
-        floor = cells[6].text.strip()
-        series = cells[7].text.strip()
-        price_sqm = cells[8].text.strip()
-        price_month = cells[9].text.strip()
-
-        # Construct dictionary
-        listings.append({
-            "id": listing_id,
-            "category": category,
-            "subcategory": subcategory,
-            "city": city,
-            "district": district,
-            "address": address,
-            "rooms": rooms,
-            "area_sqm": area,
-            "floor": floor,
-            "series": series,
-            "price_per_sqm": price_sqm,
-            "price_monthly": price_month,
-            "description": description
-        })
-
-    return listings
+from config import HEADERS, REQUEST_DELAY_RANGE, TELEGRAM_BOT_TOKEN, get_target_urls
+from db import get_total_saved_count, init_db, is_id_seen, save_listing
+from scraper import fetch_page, get_total_pages, parse_listings_from_page
+from telegram import format_telegram_card, run_telegram_listener, send_telegram_message
 
 
 def run_scraper():
+    init_db()
+    is_first_run = get_total_saved_count() == 0
+    target_urls = get_target_urls()
+
+    if not target_urls:
+        target_urls = ["https://www.ss.com/lv/real-estate/flats/riga/centre/hand_over/"]
+
     session = requests.Session()
     session.headers.update(HEADERS)
 
-    print("Fetching page 1 to check total pages...")
-    first_page_res = session.get(BASE_URL)
+    total_new_listings = 0
 
-    if first_page_res.status_code != 200:
-        print(f"Failed to fetch initial page. Status code: {first_page_res.status_code}")
+    for district_index, base_url in enumerate(target_urls, start=1):
+        print(f"Fetching listings for district {district_index}/{len(target_urls)}: {base_url}")
+
+        first_page = fetch_page(session, base_url)
+        total_pages = get_total_pages(first_page)
+        print(f"Total pages identified: {total_pages}")
+
+        for page_number in range(1, total_pages + 1):
+            page_url = base_url if page_number == 1 else f"{base_url}page{page_number}.html"
+            soup = first_page if page_number == 1 else fetch_page(session, page_url)
+
+            page_data = parse_listings_from_page(soup)
+            print(f"Scraping page {page_number}/{total_pages}: {page_url}")
+            print(f"  -> Found {len(page_data)} listings.")
+
+            for item in page_data:
+                item_id = item.get("id", "")
+                if item_id and is_id_seen(item_id):
+                    continue
+
+                save_listing(item)
+                total_new_listings += 1
+
+                if not is_first_run:
+                    message = format_telegram_card(item)
+                    send_telegram_message(message)
+                    time.sleep(1)
+
+            if page_number < total_pages:
+                time.sleep(random.uniform(*REQUEST_DELAY_RANGE))
+
+    print(f"Scraping complete. Extracted {total_new_listings} total listings.")
+
+
+def start_background_services():
+    if not TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
         return
 
-    soup = BeautifulSoup(first_page_res.text, "html.parser")
-    total_pages = get_total_pages(soup)
-    print(f"Total pages identified: {total_pages}\n")
-
-    all_listings = []
-
-    for page in range(1, total_pages + 1):
-        page_url = BASE_URL if page == 1 else f"{BASE_URL}page{page}.html"
-        print(f"Scraping page {page}/{total_pages}: {page_url}")
-
-        if page > 1:
-            res = session.get(page_url)
-            if res.status_code != 200:
-                print(f"Skipping page {page}  (status code {res.status_code})")
-                continue
-            soup = BeautifulSoup(res.text, "html.parser")
-
-        page_data = parse_listings_from_page(soup)
-        all_listings.extend(page_data)
-        print(f"  -> Found {len(page_data)} listings.")
-
-        if page < total_pages:
-            time.sleep(random.uniform(1.5, 3.0))
-
-    # Export scraped results to JSON
-    output_filename = "ss_com_listings.json"
-    with open(output_filename, "w", encoding="utf-8") as f:
-        json.dump(all_listings, f, ensure_ascii=False, indent=4)
-
-    print(f"\nScraping complete. Extracted {len(all_listings)} total listings.")
-    print(f"Saved results to '{output_filename}'.")
+    listener_thread = threading.Thread(
+        target=run_telegram_listener,
+        name="telegram-listener",
+        daemon=True,
+    )
+    listener_thread.start()
+    print("Telegram listener started in background.")
 
 
 if __name__ == "__main__":
+    start_background_services()
     run_scraper()
