@@ -13,14 +13,11 @@ steps:
         # Resolve numeric project number for Secret Manager resource paths
         PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
 
-        # Build a single quoted secrets string to avoid gcloud parsing errors
-        SECRETS="TELEGRAM_WEBHOOK_SECRET=projects/$PROJECT_NUMBER/secrets/TELEGRAM_WEBHOOK_SECRET:latest,DB_URL=projects/$PROJECT_NUMBER/secrets/DB_URL:latest,TELEGRAM_BOT_TOKEN=projects/$PROJECT_NUMBER/secrets/TELEGRAM_BOT_TOKEN:latest,TELEGRAM_CHAT_ID=projects/$PROJECT_NUMBER/secrets/TELEGRAM_CHAT_ID:latest"
-
         gcloud run deploy ss-scraper \
           --image gcr.io/$PROJECT_ID/ss-scraper:$SHORT_SHA \
           --region=us-central1 --platform=managed --allow-unauthenticated \
           --service-account ss-scraper-run-sa@ss-scraper-506418.iam.gserviceaccount.com \
-          --set-secrets "$SECRETS"
+          --set-secrets TELEGRAM_WEBHOOK_SECRET=projects/$PROJECT_NUMBER/secrets/TELEGRAM_WEBHOOK_SECRET:latest,DB_URL=projects/$PROJECT_NUMBER/secrets/DB_URL:latest,TELEGRAM_BOT_TOKEN=projects/$PROJECT_NUMBER/secrets/TELEGRAM_BOT_TOKEN:latest,TELEGRAM_CHAT_ID=projects/$PROJECT_NUMBER/secrets/TELEGRAM_CHAT_ID:latest
 
 images:
   - 'gcr.io/$PROJECT_ID/ss-scraper:$SHORT_SHA'
