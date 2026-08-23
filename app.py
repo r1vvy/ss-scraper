@@ -1,5 +1,6 @@
 import os
 import threading
+from functools import lru_cache
 from flask import Flask, request, abort
 
 from telegram import process_telegram_command, send_telegram_message
@@ -7,15 +8,47 @@ from main import run_scraper
 
 app = Flask(__name__)
 
-# Secret to validate webhook requests (passed as query param `?secret=`)
-WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+try:
+    from google.cloud import secretmanager
+except Exception:
+    secretmanager = None
+
+
+@lru_cache(maxsize=32)
+def _get_secret_from_manager(name: str) -> str | None:
+    if not secretmanager:
+        return None
+    project_id = (
+        os.getenv("GOOGLE_CLOUD_PROJECT")
+        or os.getenv("PROJECT_ID")
+        or os.getenv("GCP_PROJECT")
+    )
+    if not project_id:
+        return None
+    client = secretmanager.SecretManagerServiceClient()
+    name_path = f"projects/{project_id}/secrets/{name}/versions/latest"
+    try:
+        response = client.access_secret_version(request={"name": name_path})
+        return response.payload.data.decode("utf-8")
+    except Exception:
+        return None
+
+
+def get_secret(name: str) -> str | None:
+    # Env var override (useful for local dev)
+    env = os.getenv(name)
+    if env:
+        return env
+    # Try Secret Manager
+    return _get_secret_from_manager(name)
 
 
 def _validate_secret(req):
-    if not WEBHOOK_SECRET:
+    webhook_secret = get_secret("TELEGRAM_WEBHOOK_SECRET")
+    if not webhook_secret:
         return True
-    secret = req.args.get("secret")
-    return secret == WEBHOOK_SECRET
+    secret = req.args.get("secret") or req.headers.get("X-Telegram-Bot-Api-Secret-Token")
+    return secret == webhook_secret
 
 
 @app.route("/telegram-webhook", methods=["POST"])
@@ -35,9 +68,10 @@ def telegram_webhook():
 @app.route("/run-scrape", methods=["POST", "GET"])
 def run_scrape():
     # Optional lightweight auth via secret param
-    if WEBHOOK_SECRET:
-        secret = request.args.get("secret")
-        if secret != WEBHOOK_SECRET:
+    webhook_secret = get_secret("TELEGRAM_WEBHOOK_SECRET")
+    if webhook_secret:
+        secret = request.args.get("secret") or request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+        if secret != webhook_secret:
             abort(403)
 
     # Run scraper in background thread to return quickly

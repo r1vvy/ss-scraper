@@ -139,3 +139,52 @@ curl -X POST "${CLOUD_RUN_URL}/run-scrape?secret=${TELEGRAM_WEBHOOK_SECRET}"
 Security notes:
 - Cloud Run must be publicly reachable for Telegram webhooks. Protect the webhook by requiring a secret (as shown). Store secrets in Secret Manager and inject them during deploy for extra safety.
 
+Runtime Secret Manager (recommended)
+-----------------------------------
+
+The app can fetch secrets from Google Secret Manager at runtime. This avoids rebuilding or redeploying just to rotate secret values.
+
+1) Install the Secret Manager client in your runtime environment (add to your deps):
+
+```bash
+pip install google-cloud-secret-manager
+# or add `google-cloud-secret-manager` to your `pyproject.toml` / requirements
+```
+
+2) Grant your Cloud Run runtime service account access to the specific secrets (least privilege):
+
+```bash
+PROJECT_ID=ss-scraper-506418
+SA_EMAIL=s-scraper-run-sa@${PROJECT_ID}.iam.gserviceaccount.com
+
+# Grant access to TELEGRAM_WEBHOOK_SECRET
+gcloud secrets add-iam-policy-binding TELEGRAM_WEBHOOK_SECRET \
+	--project="$PROJECT_ID" \
+	--member="serviceAccount:${SA_EMAIL}" \
+	--role="roles/secretmanager.secretAccessor"
+
+# Grant access to DB_URL
+gcloud secrets add-iam-policy-binding DB_URL \
+	--project="$PROJECT_ID" \
+	--member="serviceAccount:${SA_EMAIL}" \
+	--role="roles/secretmanager.secretAccessor"
+```
+
+3) How the app uses secrets
+
+- The app will first check for an environment variable named the same as the secret (e.g. `TELEGRAM_WEBHOOK_SECRET`). If present, it will use that value (useful for local dev).
+- Otherwise the app will call Secret Manager to read `projects/$PROJECT_ID/secrets/<NAME>/versions/latest` at runtime. The value is cached in-memory for efficiency.
+
+4) When you rotate a secret, add a new secret version:
+
+```bash
+echo -n "NEW_VALUE" | gcloud secrets versions add TELEGRAM_WEBHOOK_SECRET --project="$PROJECT_ID" --data-file=-
+```
+
+No redeploy is required when secrets are read at runtime; the app will pick up the new value after the in-memory cache expires or if restarted. For immediate propagation you can still create a new Cloud Run revision.
+
+Notes:
+- Make sure your runtime service account has `roles/secretmanager.secretAccessor` for the secrets it needs.
+- Avoid committing long-lived service account keys; use IAM bindings instead.
+
+
