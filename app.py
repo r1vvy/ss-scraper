@@ -46,6 +46,11 @@ def run_scrape():
     return ("Scrape started", 202)
 
 
+@app.route("/health", methods=["GET"])
+def health():
+    return ("OK", 200)
+
+
 if __name__ == "__main__":
     # Local dev: run Flask dev server
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
