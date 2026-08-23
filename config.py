@@ -30,6 +30,12 @@ DB_PATH = as_path(os.getenv("SS_DB_PATH", BASE_DIR / "ss_listings.db"))
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID_HERE")
 
+DB_URL = os.getenv("DB_URL")
+
+# If DB_URL is set, use Postgres (Supabase). Otherwise fall back to SQLite.
+FINAL_DB_URL = DB_URL
+USE_POSTGRES = bool(FINAL_DB_URL)
+
 
 def normalize_district_name(value):
     if value is None:

@@ -1,0 +1,9 @@
+__pycache__
+.venv
+.git
+*.pyc
+*.db
+ss_com_listings.json
+districts.json
+ss_listings.db
+.github
