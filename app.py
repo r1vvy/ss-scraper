@@ -1,12 +1,17 @@
 import os
 import threading
 from functools import lru_cache
+import logging
 from flask import Flask, request, abort
 
 from telegram import process_telegram_command, send_telegram_message
 from main import run_scraper
 
 app = Flask(__name__)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ss_scraper.app")
 
 try:
     from google.cloud import secretmanager
@@ -31,6 +36,7 @@ def _get_secret_from_manager(name: str) -> str | None:
         response = client.access_secret_version(request={"name": name_path})
         return response.payload.data.decode("utf-8")
     except Exception:
+        logger.exception("failed to access secret %s from Secret Manager", name)
         return None
 
 
@@ -38,9 +44,15 @@ def get_secret(name: str) -> str | None:
     # Env var override (useful for local dev)
     env = os.getenv(name)
     if env:
+        logger.debug("secret %s loaded from env", name)
         return env
     # Try Secret Manager
-    return _get_secret_from_manager(name)
+    val = _get_secret_from_manager(name)
+    if val is not None:
+        logger.debug("secret %s loaded from Secret Manager (cached)", name)
+    else:
+        logger.debug("secret %s not found in env or Secret Manager", name)
+    return val
 
 
 def _validate_secret(req):
@@ -48,20 +60,31 @@ def _validate_secret(req):
     if not webhook_secret:
         return True
     secret = req.args.get("secret") or req.headers.get("X-Telegram-Bot-Api-Secret-Token")
-    return secret == webhook_secret
+    valid = secret == webhook_secret
+    if not valid:
+        logger.warning("webhook secret validation failed (present=%s)", bool(secret))
+    return valid
 
 
 @app.route("/telegram-webhook", methods=["POST"])
 def telegram_webhook():
+    logger.info("incoming webhook request from %s %s", request.remote_addr, request.path)
     if not _validate_secret(request):
+        logger.warning("unauthorized webhook request")
         abort(403)
 
+    raw = request.get_data(as_text=True)
+    logger.debug("raw webhook body: %s", raw)
+
     payload = request.get_json(silent=True)
-    if not payload:
+    logger.debug("parsed webhook payload: %s", payload)
+    if payload is None:
+        logger.warning("webhook received invalid or empty JSON payload")
         return "", 400
 
     # Process the update (synchronous)
     processed = process_telegram_command(payload)
+    logger.info("processed webhook: processed=%s", bool(processed))
     return ("", 204) if processed else ("", 200)
 
 
@@ -74,14 +97,17 @@ def run_scrape():
         if secret != webhook_secret:
             abort(403)
 
+    logger.info("run-scrape requested by %s", request.remote_addr)
     # Run scraper in background thread to return quickly
     thread = threading.Thread(target=run_scraper, daemon=True)
     thread.start()
+    logger.info("scrape thread started")
     return ("Scrape started", 202)
 
 
 @app.route("/health", methods=["GET"])
 def health():
+    logger.debug("health check")
     return ("OK", 200)
 
 
