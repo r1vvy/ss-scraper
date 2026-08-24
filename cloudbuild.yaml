@@ -10,19 +10,20 @@ steps:
     args:
       - '-c'
       - |
+        set -euo pipefail
+
+        test -n "${PROJECT_ID:-}" || { echo "PROJECT_ID is missing"; exit 1; }
 
         PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
-        SERVICE_ACCOUNT="ss-scraper-run-sa@$PROJECT_ID.iam.gserviceaccount.com"
 
         gcloud run deploy ss-scraper \
           --project "$PROJECT_ID" \
-          --image gcr.io/$PROJECT_ID/ss-scraper:$SHORT_SHA \
+          --image "gcr.io/$PROJECT_ID/ss-scraper:$SHORT_SHA" \
           --region=us-central1 \
           --platform=managed \
           --allow-unauthenticated \
-          --service-account "$SERVICE_ACCOUNT" \
-          --set-secrets TELEGRAM_WEBHOOK_SECRET=projects/$PROJECT_NUMBER/secrets/TELEGRAM_WEBHOOK_SECRET:latest,DB_URL=projects/$PROJECT_NUMBER/secrets/DB_URL:latest,TELEGRAM_BOT_TOKEN=projects/$PROJECT_NUMBER/secrets/TELEGRAM_BOT_TOKEN:latest,TELEGRAM_CHAT_ID=projects/$PROJECT_NUMBER/secrets/TELEGRAM_CHAT_ID:latest
-
+          --set-secrets "TELEGRAM_WEBHOOK_SECRET=projects/$PROJECT_NUMBER/secrets/TELEGRAM_WEBHOOK_SECRET:latest,DB_URL=projects/$PROJECT_NUMBER/secrets/DB_URL:latest,TELEGRAM_BOT_TOKEN=projects/$PROJECT_NUMBER/secrets/TELEGRAM_BOT_TOKEN:latest,TELEGRAM_CHAT_ID=projects/$PROJECT_NUMBER/secrets/TELEGRAM_CHAT_ID:latest"
+          
 images:
   - 'gcr.io/$PROJECT_ID/ss-scraper:$SHORT_SHA'
 
