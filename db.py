@@ -1,5 +1,8 @@
+import logging
 import sqlite3
 from config import DB_PATH, as_path, USE_POSTGRES, FINAL_DB_URL
+
+logger = logging.getLogger(__name__)
 
 
 if USE_POSTGRES:
@@ -41,108 +44,141 @@ def init_db():
     )
     """
 
-    if USE_POSTGRES:
-        with _engine.begin() as conn:
-            conn.execute(text(schema))
-        return
+    logger.info("Initializing DB schema for %s database", "Postgres" if USE_POSTGRES else "SQLite")
 
-    with get_connection() as conn:
-        conn.execute(schema)
-        conn.commit()
+    try:
+        if USE_POSTGRES:
+            with _engine.begin() as conn:
+                conn.execute(text(schema))
+            logger.info("Database schema ready for Postgres")
+            return
+
+        with get_connection() as conn:
+            conn.execute(schema)
+            conn.commit()
+        logger.info("Database schema ready for SQLite at %s", DB_PATH)
+    except Exception:
+        logger.exception("Database init failed: schema creation or initialization error")
+        raise
 
 
 def is_id_seen(listing_id):
     if not listing_id:
+        logger.debug("Skipping duplicate check for empty listing id")
         return True
 
-    if USE_POSTGRES:
-        with _engine.connect() as conn:
-            result = conn.execute(text("SELECT 1 FROM listings WHERE id = :id"), {"id": listing_id})
-            return result.fetchone() is not None
+    try:
+        if USE_POSTGRES:
+            with _engine.connect() as conn:
+                result = conn.execute(text("SELECT 1 FROM listings WHERE id = :id"), {"id": listing_id})
+                seen = result.fetchone() is not None
+            logger.debug("Duplicate check for id=%s -> %s", listing_id, seen)
+            return seen
 
-    with get_connection() as conn:
-        cursor = conn.execute("SELECT 1 FROM listings WHERE id = ?", (listing_id,))
-        return cursor.fetchone() is not None
+        with get_connection() as conn:
+            cursor = conn.execute("SELECT 1 FROM listings WHERE id = ?", (listing_id,))
+            seen = cursor.fetchone() is not None
+        logger.debug("Duplicate check for id=%s -> %s", listing_id, seen)
+        return seen
+    except Exception:
+        logger.exception("Database duplicate check failed for listing id=%s", listing_id)
+        raise
 
 
 def save_listing(item):
-    if USE_POSTGRES:
-        stmt = text(
-            """
-            INSERT INTO listings (
-                id, category, subcategory, city, district, address, rooms,
-                area_sqm, floor, series, price_per_sqm, price_monthly,
-                description, url
-            ) VALUES (
-                :id, :category, :subcategory, :city, :district, :address, :rooms,
-                :area_sqm, :floor, :series, :price_per_sqm, :price_monthly,
-                :description, :url
-            ) ON CONFLICT (id) DO NOTHING
-            """
-        )
+    listing_id = item.get("id", "")
+    logger.debug("Saving listing id=%s district=%s", listing_id, item.get("district", ""))
 
-        params = {
-            "id": item.get("id", ""),
-            "category": item.get("category", ""),
-            "subcategory": item.get("subcategory", ""),
-            "city": item.get("city", ""),
-            "district": item.get("district", ""),
-            "address": item.get("address", ""),
-            "rooms": item.get("rooms", ""),
-            "area_sqm": item.get("area_sqm", ""),
-            "floor": item.get("floor", ""),
-            "series": item.get("series", ""),
-            "price_per_sqm": item.get("price_per_sqm", ""),
-            "price_monthly": item.get("price_monthly", ""),
-            "description": item.get("description", ""),
-            "url": item.get("url", ""),
-        }
+    try:
+        if USE_POSTGRES:
+            stmt = text(
+                """
+                INSERT INTO listings (
+                    id, category, subcategory, city, district, address, rooms,
+                    area_sqm, floor, series, price_per_sqm, price_monthly,
+                    description, url
+                ) VALUES (
+                    :id, :category, :subcategory, :city, :district, :address, :rooms,
+                    :area_sqm, :floor, :series, :price_per_sqm, :price_monthly,
+                    :description, :url
+                ) ON CONFLICT (id) DO NOTHING
+                """
+            )
 
-        with _engine.begin() as conn:
-            conn.execute(stmt, params)
+            params = {
+                "id": listing_id,
+                "category": item.get("category", ""),
+                "subcategory": item.get("subcategory", ""),
+                "city": item.get("city", ""),
+                "district": item.get("district", ""),
+                "address": item.get("address", ""),
+                "rooms": item.get("rooms", ""),
+                "area_sqm": item.get("area_sqm", ""),
+                "floor": item.get("floor", ""),
+                "series": item.get("series", ""),
+                "price_per_sqm": item.get("price_per_sqm", ""),
+                "price_monthly": item.get("price_monthly", ""),
+                "description": item.get("description", ""),
+                "url": item.get("url", ""),
+            }
 
-        return
+            with _engine.begin() as conn:
+                conn.execute(stmt, params)
+            logger.info("Saved listing id=%s to Postgres", listing_id)
+            return
 
-    with get_connection() as conn:
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO listings (
-                id, category, subcategory, city, district, address, rooms,
-                area_sqm, floor, series, price_per_sqm, price_monthly,
-                description, url
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                item.get("id", ""),
-                item.get("category", ""),
-                item.get("subcategory", ""),
-                item.get("city", ""),
-                item.get("district", ""),
-                item.get("address", ""),
-                item.get("rooms", ""),
-                item.get("area_sqm", ""),
-                item.get("floor", ""),
-                item.get("series", ""),
-                item.get("price_per_sqm", ""),
-                item.get("price_monthly", ""),
-                item.get("description", ""),
-                item.get("url", ""),
-            ),
-        )
-        conn.commit()
+        with get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO listings (
+                    id, category, subcategory, city, district, address, rooms,
+                    area_sqm, floor, series, price_per_sqm, price_monthly,
+                    description, url
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    listing_id,
+                    item.get("category", ""),
+                    item.get("subcategory", ""),
+                    item.get("city", ""),
+                    item.get("district", ""),
+                    item.get("address", ""),
+                    item.get("rooms", ""),
+                    item.get("area_sqm", ""),
+                    item.get("floor", ""),
+                    item.get("series", ""),
+                    item.get("price_per_sqm", ""),
+                    item.get("price_monthly", ""),
+                    item.get("description", ""),
+                    item.get("url", ""),
+                ),
+            )
+            conn.commit()
+        logger.info("Saved listing id=%s to SQLite", listing_id)
+    except Exception:
+        logger.exception("Database save failed for listing id=%s", listing_id)
+        raise
 
 
 def get_total_saved_count():
-    if USE_POSTGRES:
-        with _engine.connect() as conn:
-            result = conn.execute(text("SELECT COUNT(*) FROM listings"))
-            # SQLAlchemy Row supports scalar() in modern versions; fallback to fetchone
-            try:
-                return int(result.scalar())
-            except Exception:
-                row = result.fetchone()
-                return int(row[0]) if row else 0
+    try:
+        if USE_POSTGRES:
+            with _engine.connect() as conn:
+                result = conn.execute(text("SELECT COUNT(*) FROM listings"))
+                # SQLAlchemy Row supports scalar() in modern versions; fallback to fetchone
+                try:
+                    count = int(result.scalar())
+                except Exception:
+                    row = result.fetchone()
+                    count = int(row[0]) if row else 0
+            logger.debug("Total saved count in Postgres: %s", count)
+            return count
 
-    with get_connection() as conn:
-        cursor = conn.execute("SELECT COUNT(*) FROM listings")
-        return cursor.fetchone()[0]
+        with get_connection() as conn:
+            cursor = conn.execute("SELECT COUNT(*) FROM listings")
+            count = cursor.fetchone()[0]
+        logger.debug("Total saved count in SQLite: %s", count)
+        return count
+    except Exception:
+        logger.exception("Database count query failed")
+        raise

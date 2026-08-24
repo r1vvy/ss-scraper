@@ -1,4 +1,21 @@
+import sqlite3
+
 import db
+
+
+def test_init_db_logs_errors(monkeypatch, caplog):
+    def boom(*args, **kwargs):
+        raise sqlite3.DatabaseError("database is unavailable")
+
+    monkeypatch.setattr(db.sqlite3, "connect", boom, raising=False)
+
+    with caplog.at_level("ERROR"):
+        try:
+            db.init_db()
+        except sqlite3.DatabaseError:
+            pass
+
+    assert "Database init failed" in caplog.text
 
 
 def test_save_listing_and_duplicate_detection(tmp_path, monkeypatch):

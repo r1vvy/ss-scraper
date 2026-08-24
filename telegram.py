@@ -1,7 +1,9 @@
 import html
 import time
+import logging
 
 import requests
+from functools import lru_cache
 
 from config import DEFAULT_DISTRICTS, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, load_districts, save_districts
 
@@ -91,9 +93,8 @@ def handle_telegram_update(update):
 def send_telegram_message(text, chat_id=None):
     """Sends an HTML formatted message to Telegram."""
     target_chat_id = chat_id if chat_id is not None else TELEGRAM_CHAT_ID
-
     if TELEGRAM_BOT_TOKEN == "YOUR_BOT_TOKEN_HERE" or target_chat_id in {None, "YOUR_CHAT_ID_HERE"}:
-        print("Telegram is not configured. Skipping message send.")
+        logger.warning("Telegram not configured. Skipping message send.")
         return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -107,8 +108,12 @@ def send_telegram_message(text, chat_id=None):
     try:
         response = requests.post(url, json=payload, timeout=10)
         response.raise_for_status()
+    except requests.HTTPError as exc:
+        status = getattr(exc.response, "status_code", None)
+        body = exc.response.text if exc.response is not None else ""
+        logger.exception("Failed to send Telegram message: %s %s", status, body)
     except requests.RequestException as exc:
-        print(f"Failed to send Telegram message: {exc}")
+        logger.exception("Failed to send Telegram message: %s", exc)
 
 
 def process_telegram_command(update):
