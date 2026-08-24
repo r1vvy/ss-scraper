@@ -10,9 +10,6 @@ steps:
     args:
       - '-c'
       - |
-        set -euo pipefail
-
-        test -n "${PROJECT_ID:-}" || { echo "PROJECT_ID is missing"; exit 1; }
 
         PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
         SERVICE_ACCOUNT="ss-scraper-run-sa@$PROJECT_ID.iam.gserviceaccount.com"
