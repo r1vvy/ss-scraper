@@ -1,6 +1,6 @@
 import html
 import time
-import logging
+import logging as logger
 
 import requests
 from functools import lru_cache
