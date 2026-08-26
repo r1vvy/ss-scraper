@@ -5,7 +5,6 @@ import time
 
 import requests
 
-from config import HEADERS, REQUEST_DELAY_RANGE, TELEGRAM_BOT_TOKEN, get_target_urls
 from config import HEADERS, REQUEST_DELAY_RANGE, TELEGRAM_BOT_TOKEN, get_target_urls, load_districts
 from db import get_total_saved_count, init_db, is_id_seen, save_listing
 from scraper import fetch_page, get_total_pages, parse_listings_from_page
