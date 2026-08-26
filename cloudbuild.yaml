@@ -1,4 +1,5 @@
 steps:
+  # 1. Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
@@ -6,26 +7,25 @@ steps:
       - 'gcr.io/$PROJECT_ID/ss-scraper:$SHORT_SHA'
       - '.'
 
+  # 2. Push the Docker image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
       - 'gcr.io/$PROJECT_ID/ss-scraper:$SHORT_SHA'
 
-  - name: 'gcr.io/cloud-builders/gcloud'
-    entrypoint: 'bash'
+  # 3. Deploy to Cloud Run using built-in substitutions
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
     args:
-      - '-c'
-      - |
-        PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
-
-        gcloud run deploy ss-scraper \
-          --project "$PROJECT_ID" \
-          --image "gcr.io/$PROJECT_ID/ss-scraper:$SHORT_SHA" \
-          --region=us-central1 \
-          --platform=managed \
-          --allow-unauthenticated \
-          --service-account="ss-scraper-run-sa@$PROJECT_ID.iam.gserviceaccount.com" \
-          --set-secrets "TELEGRAM_WEBHOOK_SECRET=projects/$PROJECT_NUMBER/secrets/TELEGRAM_WEBHOOK_SECRET:latest,DB_URL=projects/$PROJECT_NUMBER/secrets/DB_URL:latest,TELEGRAM_BOT_TOKEN=projects/$PROJECT_NUMBER/secrets/TELEGRAM_BOT_TOKEN:latest,TELEGRAM_CHAT_ID=projects/$PROJECT_NUMBER/secrets/TELEGRAM_CHAT_ID:latest"
+      - 'run'
+      - 'deploy'
+      - 'ss-scraper'
+      - '--image=gcr.io/$PROJECT_ID/ss-scraper:$SHORT_SHA'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--service-account=ss-scraper-run-sa@$PROJECT_ID.iam.gserviceaccount.com'
+      - '--set-secrets=TELEGRAM_WEBHOOK_SECRET=projects/$PROJECT_NUMBER/secrets/TELEGRAM_WEBHOOK_SECRET:latest,DB_URL=projects/$PROJECT_NUMBER/secrets/DB_URL:latest,TELEGRAM_BOT_TOKEN=projects/$PROJECT_NUMBER/secrets/TELEGRAM_BOT_TOKEN:latest,TELEGRAM_CHAT_ID=projects/$PROJECT_NUMBER/secrets/TELEGRAM_CHAT_ID:latest'
 
 images:
   - 'gcr.io/$PROJECT_ID/ss-scraper:$SHORT_SHA'
