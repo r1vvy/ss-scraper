@@ -92,6 +92,7 @@ def test_run_scraper_handles_network_errors(monkeypatch, tmp_path):
         raise requests.RequestException("Simulated connection failure")
 
     monkeypatch.setattr("main.fetch_page", failing_fetch)
-    # Should not raise exception
-    count = run_scraper()
+    # Should not raise exception and report 0 new listings with errors
+    count, errors = run_scraper()
     assert count == 0
+    assert len(errors) > 0

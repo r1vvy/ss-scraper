@@ -1,4 +1,5 @@
 import os
+import sys
 import threading
 from functools import lru_cache
 import logging
@@ -7,11 +8,15 @@ from flask import Flask, request, abort
 from telegram import process_telegram_command, send_telegram_message
 from main import run_scraper, trigger_scrape
 
-app = Flask(__name__)
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure console logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stdout,
+)
 logger = logging.getLogger("ss_scraper.app")
+
+app = Flask(__name__)
 
 try:
     from google.cloud import secretmanager

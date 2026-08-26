@@ -1,5 +1,7 @@
 import html
+import logging
 import random
+import sys
 import threading
 import time
 
@@ -10,10 +12,18 @@ from db import get_total_saved_count, init_db, is_id_seen, save_listing
 from scraper import fetch_page, get_total_pages, parse_listings_from_page
 from telegram import format_telegram_card, run_telegram_listener, send_telegram_message
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stdout,
+)
+logger = logging.getLogger("ss_scraper.main")
+
 
 def run_scraper(notify_chat_id=None):
     init_db()
-    is_first_run = get_total_saved_count() == 0
+    total_saved_before = get_total_saved_count()
+    is_first_run = total_saved_before == 0
     target_urls = get_target_urls()
 
     if not target_urls:
@@ -23,30 +33,39 @@ def run_scraper(notify_chat_id=None):
     session.headers.update(HEADERS)
 
     total_new_listings = 0
+    fetch_errors = []
+
+    logger.info(
+        "Starting scrape run (existing_db_listings=%d, is_first_run=%s, districts_count=%d)",
+        total_saved_before,
+        is_first_run,
+        len(target_urls),
+    )
 
     for district_index, base_url in enumerate(target_urls, start=1):
-        print(f"Fetching listings for district {district_index}/{len(target_urls)}: {base_url}")
+        logger.info("Fetching listings for district %d/%d: %s", district_index, len(target_urls), base_url)
 
         try:
             first_page = fetch_page(session, base_url)
         except requests.RequestException as err:
-            print(f"Error fetching district {base_url}: {err}")
+            logger.error("Failed to fetch district %s: %s", base_url, err)
+            fetch_errors.append(f"{base_url}: {err}")
             continue
 
         total_pages = get_total_pages(first_page)
-        print(f"Total pages identified: {total_pages}")
+        logger.info("District %s: total pages identified = %d", base_url, total_pages)
 
         for page_number in range(1, total_pages + 1):
             page_url = base_url if page_number == 1 else f"{base_url}page{page_number}.html"
             try:
                 soup = first_page if page_number == 1 else fetch_page(session, page_url)
             except requests.RequestException as err:
-                print(f"Error fetching page {page_url}: {err}")
+                logger.error("Failed to fetch page %s: %s", page_url, err)
+                fetch_errors.append(f"{page_url}: {err}")
                 continue
 
             page_data = parse_listings_from_page(soup)
-            print(f"Scraping page {page_number}/{total_pages}: {page_url}")
-            print(f"  -> Found {len(page_data)} listings.")
+            logger.info("Scraped page %d/%d (%s): found %d listings", page_number, total_pages, page_url, len(page_data))
 
             for item in page_data:
                 item_id = item.get("id", "")
@@ -64,8 +83,12 @@ def run_scraper(notify_chat_id=None):
             if page_number < total_pages:
                 time.sleep(random.uniform(*REQUEST_DELAY_RANGE))
 
-    print(f"Scraping complete. Extracted {total_new_listings} total listings.")
-    return total_new_listings
+    logger.info(
+        "Scraping complete. Extracted %d new listings. Errors: %d",
+        total_new_listings,
+        len(fetch_errors),
+    )
+    return total_new_listings, fetch_errors
 
 
 _scrape_lock = threading.Lock()
@@ -85,17 +108,25 @@ def trigger_scrape(chat_id=None):
 
     def _worker():
         try:
-            total_new = run_scraper(notify_chat_id=chat_id)
+            total_new, errors = run_scraper(notify_chat_id=chat_id)
             if chat_id:
+                if errors:
+                    err_summary = f"\n⚠️ Encountered {len(errors)} fetch error(s) (check logs)."
+                else:
+                    err_summary = ""
+
                 if total_new == 0:
-                    send_telegram_message("✅ Scraping complete. No new listings found.", chat_id=chat_id)
+                    send_telegram_message(
+                        f"✅ Scraping complete. No new listings found.{err_summary}",
+                        chat_id=chat_id,
+                    )
                 else:
                     send_telegram_message(
-                        f"✅ Scraping complete. Found <b>{total_new}</b> new listing(s).",
+                        f"✅ Scraping complete. Found <b>{total_new}</b> new listing(s).{err_summary}",
                         chat_id=chat_id,
                     )
         except Exception as exc:
-            print(f"Error during scrape: {exc}")
+            logger.exception("Error during scrape: %s", exc)
             if chat_id:
                 send_telegram_message(f"❌ Error during scrape: {html.escape(str(exc))}", chat_id=chat_id)
         finally:
@@ -116,16 +147,16 @@ def start_background_services():
         daemon=True,
     )
     listener_thread.start()
-    print("Telegram listener started in background.")
+    logger.info("Telegram listener started in background.")
 
 
 if __name__ == "__main__":
     start_background_services()
     run_scraper()
     if TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_TOKEN != "YOUR_BOT_TOKEN_HERE":
-        print("Telegram bot listener active. Press Ctrl+C to exit.")
+        logger.info("Telegram bot listener active. Press Ctrl+C to exit.")
         try:
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
-            print("Shutting down...")
+            logger.info("Shutting down...")

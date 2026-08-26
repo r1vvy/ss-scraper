@@ -15,5 +15,6 @@ RUN pip install SQLAlchemy psycopg2-binary requests beautifulsoup4 flask gunicor
 COPY . /app
 
 ENV PORT=8080
+ENV PYTHONUNBUFFERED=1
 
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "8"]
+CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "8", "--access-logfile", "-", "--error-logfile", "-", "--capture-output", "--log-level", "info"]

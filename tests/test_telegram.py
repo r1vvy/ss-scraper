@@ -71,7 +71,7 @@ def test_handle_telegram_update_processes_slash_command(monkeypatch):
 
 
 def test_trigger_scrape_prevents_concurrent_runs(monkeypatch):
-    monkeypatch.setattr("main.run_scraper", lambda notify_chat_id=None: 0)
+    monkeypatch.setattr("main.run_scraper", lambda notify_chat_id=None: (0, []))
     monkeypatch.setattr("main.load_districts", lambda: ["centre"])
 
     main._scrape_lock.acquire()

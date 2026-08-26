@@ -1,11 +1,13 @@
 import html
+import logging
 import time
-import logging as logger
 
 import requests
 from functools import lru_cache
 
 from config import DEFAULT_DISTRICTS, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, load_districts, save_districts
+
+logger = logging.getLogger("ss_scraper.telegram")
 
 
 def fetch_updates(offset=None):
