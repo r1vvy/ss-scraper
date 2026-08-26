@@ -10,3 +10,4 @@ main.py
 ss_listings.db
 ss_com_listings.json
 .directory
+__pycache__/*
