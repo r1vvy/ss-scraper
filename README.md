@@ -47,11 +47,6 @@ python -c "from config import save_districts; print(save_districts(['centre', 'm
 ```
 
 Or send these commands to your Telegram bot once it is running:
-- `/scrape` (or `/run`) - Manually triggers a scraping run
-- `/districts` - Shows currently configured districts
-- `/districts centre, mezciems, old-town` - Sets the districts to scrape
-- `/reset_districts` - Resets districts back to default (`centre`)
-- `/help` - Displays bot commands and descriptions
 
 - `/districts`
 - `/districts centre, mezciems, old-town`
