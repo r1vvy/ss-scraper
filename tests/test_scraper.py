@@ -84,9 +84,8 @@ def test_run_scraper_handles_network_errors(monkeypatch, tmp_path):
     import requests
     from main import run_scraper
 
-    db_path = tmp_path / "test.db"
-    monkeypatch.setattr("db.DB_PATH", str(db_path))
-    monkeypatch.setattr("config.DB_PATH", str(db_path))
+    monkeypatch.setattr("main.init_db", lambda: None)
+    monkeypatch.setattr("main.get_total_saved_count", lambda: 0)
 
     def failing_fetch(*args, **kwargs):
         raise requests.RequestException("Simulated connection failure")

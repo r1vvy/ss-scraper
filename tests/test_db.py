@@ -1,27 +1,36 @@
-import sqlite3
+import pytest
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 
 import db
 
 
+@pytest.fixture(autouse=True)
+def mock_db_engine(monkeypatch):
+    engine = create_engine("sqlite://")
+    with engine.begin() as conn:
+        conn.execute(text("ATTACH DATABASE ':memory:' AS public"))
+    monkeypatch.setattr(db, "get_engine", lambda: engine)
+    return engine
+
+
 def test_init_db_logs_errors(monkeypatch, caplog):
     def boom(*args, **kwargs):
-        raise sqlite3.DatabaseError("database is unavailable")
+        raise SQLAlchemyError("database is unavailable")
 
-    monkeypatch.setattr(db.sqlite3, "connect", boom, raising=False)
+    # Mock get_engine to raise an error
+    monkeypatch.setattr(db, "get_engine", boom)
 
     with caplog.at_level("ERROR"):
         try:
             db.init_db()
-        except sqlite3.DatabaseError:
+        except SQLAlchemyError:
             pass
 
     assert "Database init failed" in caplog.text
 
 
-def test_save_listing_and_duplicate_detection(tmp_path, monkeypatch):
-    db_file = tmp_path / "ss_test.db"
-    monkeypatch.setattr(db, "DB_PATH", str(db_file), raising=False)
-
+def test_save_listing_and_duplicate_detection():
     db.init_db()
 
     item = {
@@ -48,5 +57,6 @@ def test_save_listing_and_duplicate_detection(tmp_path, monkeypatch):
     assert db.get_total_saved_count() == 1
     assert db.is_id_seen(item["id"]) is True
 
+    # Save duplicate listing, should DO NOTHING (no conflict)
     db.save_listing(item)
     assert db.get_total_saved_count() == 1

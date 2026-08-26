@@ -6,7 +6,7 @@ from telegram import handle_district_command, handle_telegram_update
 
 def test_handle_district_command_districts_view(tmp_path, monkeypatch):
     config_path = tmp_path / "districts.json"
-    monkeypatch.setattr("config.CONFIG_PATH", str(config_path))
+    monkeypatch.setattr("config.CONFIG_PATH", config_path)
     monkeypatch.setattr("telegram.load_districts", lambda: ["centre", "mezciems"])
 
     result = handle_district_command("/districts")
@@ -15,7 +15,7 @@ def test_handle_district_command_districts_view(tmp_path, monkeypatch):
 
 def test_handle_district_command_districts_update(tmp_path, monkeypatch):
     config_path = tmp_path / "districts.json"
-    monkeypatch.setattr("config.CONFIG_PATH", str(config_path))
+    monkeypatch.setattr("config.CONFIG_PATH", config_path)
 
     result = handle_district_command("/districts agenskalns, teika")
     assert "agenskalns, teika" in result
@@ -23,7 +23,7 @@ def test_handle_district_command_districts_update(tmp_path, monkeypatch):
 
 def test_handle_district_command_reset(tmp_path, monkeypatch):
     config_path = tmp_path / "districts.json"
-    monkeypatch.setattr("config.CONFIG_PATH", str(config_path))
+    monkeypatch.setattr("config.CONFIG_PATH", config_path)
 
     result = handle_district_command("/reset_districts")
     assert "centre" in result

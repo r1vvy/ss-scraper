@@ -10,21 +10,6 @@ from config import DEFAULT_DISTRICTS, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, load
 logger = logging.getLogger("ss_scraper.telegram")
 
 
-def fetch_updates(offset=None):
-    if not TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
-        return []
-
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
-    params = {"timeout": 30, "limit": 20}
-    if offset is not None:
-        params["offset"] = offset
-
-    response = requests.get(url, params=params, timeout=35)
-    response.raise_for_status()
-    payload = response.json()
-    return payload.get("result", [])
-
-
 def format_telegram_card(item):
     """Formats a listing dict into an HTML Telegram card."""
     city = html.escape(str(item.get("city", "")).title())
@@ -141,24 +126,3 @@ def process_telegram_command(update):
 
     send_telegram_message(command_response["text"], chat_id=command_response.get("chat_id"))
     return True
-
-
-def run_telegram_listener():
-    """Poll Telegram for commands and update district configuration."""
-    if TELEGRAM_BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
-        print("Telegram bot token is not configured. Bot listener disabled.")
-        return
-
-    last_update_id = None
-    while True:
-        try:
-            updates = fetch_updates(offset=last_update_id)
-            for update in updates:
-                update_id = update.get("update_id")
-                process_telegram_command(update)
-                if update_id is not None:
-                    last_update_id = update_id + 1
-        except Exception as exc:
-            logger.exception("Error in Telegram listener polling loop: %s", exc)
-
-        time.sleep(5)

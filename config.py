@@ -10,11 +10,7 @@ BASE_URL_TEMPLATE = "https://www.ss.com/lv/real-estate/flats/riga/{district}/han
 DEFAULT_DISTRICTS = ["centre"]
 
 
-def as_path(value):
-    return Path(value) if not isinstance(value, Path) else value
-
-
-CONFIG_PATH = as_path(os.getenv("SS_CONFIG_PATH", BASE_DIR / "districts.json"))
+CONFIG_PATH = Path(os.getenv("SS_CONFIG_PATH", BASE_DIR / "districts.json"))
 
 HEADERS = {
     "User-Agent": (
@@ -27,7 +23,6 @@ HEADERS = {
 
 REQUEST_TIMEOUT_SECONDS = 15
 REQUEST_DELAY_RANGE = (1.5, 3.0)
-DB_PATH = as_path(os.getenv("SS_DB_PATH", BASE_DIR / "ss_listings.db"))
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID_HERE").strip()
 
@@ -62,10 +57,7 @@ if DB_URL:
     DB_URL = DB_URL.strip()
 
 DB_PASSWORD = os.getenv("DB_PASSWORD")
-
-# If DB_URL is set, use Postgres (Supabase). Otherwise fall back to SQLite.
 FINAL_DB_URL = resolve_db_url(DB_URL, DB_PASSWORD)
-USE_POSTGRES = bool(FINAL_DB_URL and "[YOUR-PASSWORD]" not in FINAL_DB_URL)
 
 
 def normalize_district_name(value):
@@ -101,12 +93,11 @@ def normalize_districts(raw_districts):
 
 
 def load_districts():
-    config_path = as_path(CONFIG_PATH)
-    if not config_path.exists():
+    if not CONFIG_PATH.exists():
         return list(DEFAULT_DISTRICTS)
 
     try:
-        with config_path.open("r", encoding="utf-8") as file:
+        with CONFIG_PATH.open("r", encoding="utf-8") as file:
             payload = json.load(file)
     except (json.JSONDecodeError, OSError):
         return list(DEFAULT_DISTRICTS)
@@ -121,9 +112,8 @@ def save_districts(districts):
         normalized = list(DEFAULT_DISTRICTS)
 
     payload = {"districts": normalized}
-    config_path = as_path(CONFIG_PATH)
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    with config_path.open("w", encoding="utf-8") as file:
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with CONFIG_PATH.open("w", encoding="utf-8") as file:
         json.dump(payload, file, indent=2)
 
     return normalized

@@ -10,7 +10,7 @@ import requests
 from config import HEADERS, REQUEST_DELAY_RANGE, TELEGRAM_BOT_TOKEN, get_target_urls, load_districts
 from db import get_total_saved_count, init_db, is_id_seen, save_listing
 from scraper import fetch_page, get_total_pages, parse_listings_from_page
-from telegram import format_telegram_card, run_telegram_listener, send_telegram_message
+from telegram import format_telegram_card, send_telegram_message
 
 logging.basicConfig(
     level=logging.INFO,
@@ -135,26 +135,6 @@ def trigger_scrape(chat_id=None, async_run=False):
     return _execute()
 
 
-def start_background_services():
-    if not TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
-        return
-
-    listener_thread = threading.Thread(
-        target=run_telegram_listener,
-        name="telegram-listener",
-        daemon=True,
-    )
-    listener_thread.start()
-    logger.info("Telegram listener started in background.")
-
-
 if __name__ == "__main__":
-    start_background_services()
-    run_scraper()
-    if TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_TOKEN != "YOUR_BOT_TOKEN_HERE":
-        logger.info("Telegram bot listener active. Press Ctrl+C to exit.")
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            logger.info("Shutting down...")
+    success, msg = trigger_scrape()
+    logger.info("Scraper run completed: %s", msg)
