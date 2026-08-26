@@ -5,7 +5,16 @@ import time
 import requests
 from functools import lru_cache
 
-from config import DEFAULT_DISTRICTS, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, load_districts, save_districts
+from config import (
+    DEFAULT_DISTRICTS,
+    DEFAULT_FILTERS,
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CHAT_ID,
+    load_districts,
+    load_filters,
+    save_districts,
+    save_filters,
+)
 
 logger = logging.getLogger("ss_scraper.telegram")
 
@@ -39,6 +48,15 @@ def format_telegram_card(item):
     )
 
 
+def format_filter_summary(filters):
+    lines = ["<b>Current Search Filters:</b>\n"]
+    lines.append(f"• <b>Rooms:</b> {filters.get('rooms_min') or 'Any'} - {filters.get('rooms_max') or 'Any'}")
+    lines.append(f"• <b>Price:</b> {filters.get('price_min') or 'Any'} - {filters.get('price_max') or 'Any'} €")
+    lines.append(f"• <b>Area:</b> {filters.get('area_min') or 'Any'} - {filters.get('area_max') or 'Any'} m²")
+    lines.append(f"• <b>Floor:</b> {filters.get('floor_min') or 'Any'} - {filters.get('floor_max') or 'Any'}")
+    return "\n".join(lines)
+
+
 def handle_district_command(command_text, chat_id=None):
     text = (command_text or "").strip()
     if not text:
@@ -46,18 +64,65 @@ def handle_district_command(command_text, chat_id=None):
 
     command, _, args = text.partition(" ")
     cmd = command.partition("@")[0].lower()
+    args_str = args.strip()
 
     if cmd in {"/districts", "/district"}:
-        if not args.strip():
+        if not args_str:
             current = ", ".join(load_districts()) or ", ".join(DEFAULT_DISTRICTS)
             return f"Current districts: {current}"
 
-        districts = save_districts(args)
+        districts = save_districts(args_str)
         return f"Updated districts: {', '.join(districts)}"
 
     if cmd in {"/reset_districts", "/resetdistricts"}:
         districts = save_districts(DEFAULT_DISTRICTS)
         return f"Reset districts to: {', '.join(districts)}"
+
+    if cmd in {"/filter", "/filters", "/set_filter", "/setfilter"}:
+        if not args_str:
+            return format_filter_summary(load_filters())
+
+        parts = args_str.split()
+        param = parts[0].lower()
+
+        if param in {"clear", "reset"}:
+            updated = save_filters(DEFAULT_FILTERS)
+            return f"✅ Cleared all filters.\n\n{format_filter_summary(updated)}"
+
+        if len(parts) >= 2 and param in {"rooms", "room", "price", "area", "floor"}:
+            min_val = parts[1] if parts[1] != "-" else ""
+            max_val = parts[2] if len(parts) >= 3 and parts[2] != "-" else ""
+
+            updates = {}
+            if param in {"rooms", "room"}:
+                updates["rooms_min"] = min_val
+                updates["rooms_max"] = max_val
+            elif param == "price":
+                updates["price_min"] = min_val
+                updates["price_max"] = max_val
+            elif param == "area":
+                updates["area_min"] = min_val
+                updates["area_max"] = max_val
+            elif param == "floor":
+                updates["floor_min"] = min_val
+                updates["floor_max"] = max_val
+
+            updated = save_filters(updates)
+            return f"✅ Updated filter!\n\n{format_filter_summary(updated)}"
+
+        return (
+            "Usage:\n"
+            "• <code>/filter</code> - View current filters\n"
+            "• <code>/filter price &lt;min&gt; [max]</code> (e.g. <code>/filter price 300 800</code>)\n"
+            "• <code>/filter rooms &lt;min&gt; [max]</code> (e.g. <code>/filter rooms 1 3</code>)\n"
+            "• <code>/filter area &lt;min&gt; [max]</code> (e.g. <code>/filter area 40</code>)\n"
+            "• <code>/filter floor &lt;min&gt; [max]</code>\n"
+            "• <code>/filter clear</code> - Reset filters"
+        )
+
+    if cmd in {"/reset_filters", "/resetfilters"}:
+        updated = save_filters(DEFAULT_FILTERS)
+        return f"✅ Reset filters to default.\n\n{format_filter_summary(updated)}"
 
     if cmd in {"/scrape", "/run", "/run_scrape"}:
         from main import trigger_scrape
@@ -69,13 +134,14 @@ def handle_district_command(command_text, chat_id=None):
         return (
             "<b>SS Scraper Bot Commands:</b>\n\n"
             "• <code>/scrape</code> - Trigger scraper manually\n"
-            "• <code>/districts</code> - View current monitored districts\n"
-            "• <code>/districts &lt;districts&gt;</code> - Update monitored districts (e.g. <code>/districts centre, mezciems</code>)\n"
+            "• <code>/districts</code> - View or update monitored districts\n"
             "• <code>/reset_districts</code> - Reset districts to default\n"
+            "• <code>/filter</code> - View or set search filters (price, rooms, area, floor)\n"
+            "• <code>/reset_filters</code> - Clear all search filters\n"
             "• <code>/help</code> - Show this help message"
         )
 
-    return "Unknown command. Use /scrape, /districts, or /reset_districts."
+    return "Unknown command. Use /scrape, /districts, /filter, or /help."
 
 
 def handle_telegram_update(update):

@@ -92,31 +92,103 @@ def normalize_districts(raw_districts):
     return normalized
 
 
-def load_districts():
+DEFAULT_FILTERS = {
+    "rooms_min": "",
+    "rooms_max": "",
+    "price_min": "",
+    "price_max": "",
+    "area_min": "",
+    "area_max": "",
+    "floor_min": "",
+    "floor_max": "",
+}
+
+
+def load_config():
     if not CONFIG_PATH.exists():
-        return list(DEFAULT_DISTRICTS)
+        return {"districts": list(DEFAULT_DISTRICTS), "filters": dict(DEFAULT_FILTERS)}
 
     try:
         with CONFIG_PATH.open("r", encoding="utf-8") as file:
             payload = json.load(file)
+            if not isinstance(payload, dict):
+                payload = {}
     except (json.JSONDecodeError, OSError):
-        return list(DEFAULT_DISTRICTS)
+        payload = {}
 
-    districts = payload.get("districts", DEFAULT_DISTRICTS)
-    return normalize_districts(districts) or list(DEFAULT_DISTRICTS)
+    districts = normalize_districts(payload.get("districts", DEFAULT_DISTRICTS)) or list(DEFAULT_DISTRICTS)
+    raw_filters = payload.get("filters", {})
+    if not isinstance(raw_filters, dict):
+        raw_filters = {}
+
+    filters = dict(DEFAULT_FILTERS)
+    for k in DEFAULT_FILTERS:
+        if k in raw_filters and raw_filters[k] is not None:
+            filters[k] = str(raw_filters[k]).strip()
+
+    return {"districts": districts, "filters": filters}
+
+
+def save_config(districts=None, filters=None):
+    current = load_config()
+
+    if districts is not None:
+        normalized_d = normalize_districts(districts) or list(DEFAULT_DISTRICTS)
+        current["districts"] = normalized_d
+
+    if filters is not None:
+        updated_f = dict(current["filters"])
+        for k, v in filters.items():
+            if k in DEFAULT_FILTERS:
+                updated_f[k] = str(v).strip() if v is not None else ""
+        current["filters"] = updated_f
+
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with CONFIG_PATH.open("w", encoding="utf-8") as file:
+        json.dump(current, file, indent=2)
+
+    return current
+
+
+def load_districts():
+    return load_config()["districts"]
 
 
 def save_districts(districts):
-    normalized = normalize_districts(districts)
-    if not normalized:
-        normalized = list(DEFAULT_DISTRICTS)
+    return save_config(districts=districts)["districts"]
 
-    payload = {"districts": normalized}
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with CONFIG_PATH.open("w", encoding="utf-8") as file:
-        json.dump(payload, file, indent=2)
 
-    return normalized
+def load_filters():
+    return load_config()["filters"]
+
+
+def save_filters(filter_updates):
+    return save_config(filters=filter_updates)["filters"]
+
+
+def has_active_filters(filters=None):
+    f = filters or load_filters()
+    return any(bool(v) for v in f.values())
+
+
+def build_filter_payload(district, filters=None):
+    f = filters or load_filters()
+    dist_name = normalize_district_name(district) or "all"
+    sid_path = f"/lv/real-estate/flats/riga/{dist_name}/hand_over/"
+
+    return {
+        "topt[1][min]": f.get("rooms_min", ""),
+        "topt[1][max]": f.get("rooms_max", ""),
+        "topt[8][min]": f.get("price_min", ""),
+        "topt[8][max]": f.get("price_max", ""),
+        "topt[3][min]": f.get("area_min", ""),
+        "topt[3][max]": f.get("area_max", ""),
+        "topt[4][min]": f.get("floor_min", ""),
+        "topt[4][max]": f.get("floor_max", ""),
+        "opt[6]": "0",
+        "opt[11]": "0",
+        "sid": sid_path,
+    }
 
 
 def build_base_url_for_district(district):

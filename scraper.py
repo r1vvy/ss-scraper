@@ -120,3 +120,11 @@ def fetch_page(session, url):
     response.raise_for_status()
     return BeautifulSoup(response.text, "html.parser")
 
+
+def post_filter_page(session, filter_url, payload):
+    headers = dict(HEADERS)
+    headers["Content-Type"] = "application/x-www-form-urlencoded"
+    response = session.post(filter_url, data=payload, headers=headers, timeout=REQUEST_TIMEOUT_SECONDS)
+    response.raise_for_status()
+    return BeautifulSoup(response.text, "html.parser")
+

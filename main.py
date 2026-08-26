@@ -7,10 +7,18 @@ import time
 
 import requests
 
-from config import HEADERS, REQUEST_DELAY_RANGE, TELEGRAM_BOT_TOKEN, get_target_urls, load_districts
+from config import (
+    HEADERS,
+    REQUEST_DELAY_RANGE,
+    TELEGRAM_BOT_TOKEN,
+    build_filter_payload,
+    get_target_urls,
+    has_active_filters,
+    load_districts,
+    load_filters,
+)
 from db import get_total_saved_count, init_db, is_id_seen, save_listing
-from scraper import fetch_page, get_total_pages, parse_listings_from_page
-from telegram import format_telegram_card, send_telegram_message
+from scraper import fetch_page, get_total_pages, parse_listings_from_page, post_filter_page
 from telegram import format_telegram_card, run_telegram_listener, send_telegram_message
 
 logging.basicConfig(
@@ -26,6 +34,9 @@ def run_scraper(notify_chat_id=None):
     total_saved_before = get_total_saved_count()
     is_first_run = total_saved_before == 0
     target_urls = get_target_urls()
+    districts = load_districts()
+    filters = load_filters()
+    active_filters = has_active_filters(filters)
 
     if not target_urls:
         target_urls = ["https://www.ss.com/lv/real-estate/flats/riga/centre/hand_over/"]
@@ -37,17 +48,25 @@ def run_scraper(notify_chat_id=None):
     fetch_errors = []
 
     logger.info(
-        "Starting scrape run (existing_db_listings=%d, is_first_run=%s, districts_count=%d)",
+        "Starting scrape run (existing_db_listings=%d, is_first_run=%s, districts_count=%d, active_filters=%s)",
         total_saved_before,
         is_first_run,
         len(target_urls),
+        active_filters,
     )
 
     for district_index, base_url in enumerate(target_urls, start=1):
-        logger.info("Fetching listings for district %d/%d: %s", district_index, len(target_urls), base_url)
+        district_name = districts[district_index - 1] if district_index <= len(districts) else "centre"
+        logger.info("Fetching listings for district %d/%d (%s): %s", district_index, len(target_urls), district_name, base_url)
 
         try:
-            first_page = fetch_page(session, base_url)
+            if active_filters:
+                filter_url = f"{base_url.rstrip('/')}/filter/"
+                payload = build_filter_payload(district_name, filters=filters)
+                logger.info("Issuing POST filter request to %s (payload: %s)", filter_url, payload)
+                first_page = post_filter_page(session, filter_url, payload)
+            else:
+                first_page = fetch_page(session, base_url)
         except requests.RequestException as err:
             logger.error("Failed to fetch district %s: %s", base_url, err)
             fetch_errors.append(f"{base_url}: {err}")
