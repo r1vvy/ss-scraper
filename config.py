@@ -27,10 +27,12 @@ HEADERS = {
 REQUEST_TIMEOUT_SECONDS = 15
 REQUEST_DELAY_RANGE = (1.5, 3.0)
 DB_PATH = as_path(os.getenv("SS_DB_PATH", BASE_DIR / "ss_listings.db"))
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID_HERE")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE").strip()
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID_HERE").strip()
 
 DB_URL = os.getenv("DB_URL")
+if DB_URL:
+    DB_URL = DB_URL.strip()
 
 # If DB_URL is set, use Postgres (Supabase). Otherwise fall back to SQLite.
 FINAL_DB_URL = DB_URL

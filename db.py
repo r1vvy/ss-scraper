@@ -44,13 +44,32 @@ def init_db():
     )
     """
 
+    pg_schema = """
+    CREATE TABLE IF NOT EXISTS public.listings (
+        id TEXT PRIMARY KEY,
+        category TEXT,
+        subcategory TEXT,
+        city TEXT,
+        district TEXT,
+        address TEXT,
+        rooms TEXT,
+        area_sqm TEXT,
+        floor TEXT,
+        series TEXT,
+        price_per_sqm TEXT,
+        price_monthly TEXT,
+        description TEXT,
+        url TEXT
+    )
+    """
+
     logger.info("Initializing DB schema for %s database", "Postgres" if USE_POSTGRES else "SQLite")
 
     try:
         if USE_POSTGRES:
             with _engine.begin() as conn:
-                conn.execute(text(schema))
-            logger.info("Database schema ready for Postgres")
+                conn.execute(text(pg_schema))
+            logger.info("Database schema ready for Postgres (public.listings)")
             return
 
         with get_connection() as conn:
@@ -70,7 +89,7 @@ def is_id_seen(listing_id):
     try:
         if USE_POSTGRES:
             with _engine.connect() as conn:
-                result = conn.execute(text("SELECT 1 FROM listings WHERE id = :id"), {"id": listing_id})
+                result = conn.execute(text("SELECT 1 FROM public.listings WHERE id = :id"), {"id": listing_id})
                 seen = result.fetchone() is not None
             logger.debug("Duplicate check for id=%s -> %s", listing_id, seen)
             return seen
@@ -93,7 +112,7 @@ def save_listing(item):
         if USE_POSTGRES:
             stmt = text(
                 """
-                INSERT INTO listings (
+                INSERT INTO public.listings (
                     id, category, subcategory, city, district, address, rooms,
                     area_sqm, floor, series, price_per_sqm, price_monthly,
                     description, url
@@ -124,7 +143,7 @@ def save_listing(item):
 
             with _engine.begin() as conn:
                 conn.execute(stmt, params)
-            logger.info("Saved listing id=%s to Postgres", listing_id)
+            logger.info("Saved listing id=%s to Postgres (public.listings)", listing_id)
             return
 
         with get_connection() as conn:
@@ -164,8 +183,7 @@ def get_total_saved_count():
     try:
         if USE_POSTGRES:
             with _engine.connect() as conn:
-                result = conn.execute(text("SELECT COUNT(*) FROM listings"))
-                # SQLAlchemy Row supports scalar() in modern versions; fallback to fetchone
+                result = conn.execute(text("SELECT COUNT(*) FROM public.listings"))
                 try:
                     count = int(result.scalar())
                 except Exception:
