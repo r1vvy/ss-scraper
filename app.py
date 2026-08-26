@@ -6,6 +6,7 @@ from flask import Flask, request, abort
 
 from telegram import process_telegram_command, send_telegram_message
 from main import run_scraper
+from main import run_scraper, trigger_scrape
 
 app = Flask(__name__)
 
@@ -101,6 +102,9 @@ def run_scrape():
     # Run scraper in background thread to return quickly
     thread = threading.Thread(target=run_scraper, daemon=True)
     thread.start()
+    started, msg = trigger_scrape()
+    if not started:
+        return (msg, 409)
     logger.info("scrape thread started")
     return ("Scrape started", 202)
 

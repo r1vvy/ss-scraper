@@ -53,14 +53,18 @@ def format_telegram_card(item):
 
 
 def handle_district_command(command_text):
+def handle_district_command(command_text, chat_id=None):
     text = (command_text or "").strip()
     if not text:
         return "Please provide a district, for example: /districts centre, mezciems"
+        return "Please provide a command. Use /help for available commands."
 
     command, _, args = text.partition(" ")
     command = command.lower()
+    cmd = command.partition("@")[0].lower()
 
     if command in {"/districts", "/district"}:
+    if cmd in {"/districts", "/district"}:
         if not args.strip():
             current = ", ".join(load_districts()) or ", ".join(DEFAULT_DISTRICTS)
             return f"Current districts: {current}"
@@ -69,10 +73,28 @@ def handle_district_command(command_text):
         return f"Updated districts: {', '.join(districts)}"
 
     if command in {"/reset_districts", "/resetdistricts"}:
+    if cmd in {"/reset_districts", "/resetdistricts"}:
         districts = save_districts(DEFAULT_DISTRICTS)
         return f"Reset districts to: {', '.join(districts)}"
 
     return "Unknown command. Use /districts or /reset_districts."
+    if cmd in {"/scrape", "/run", "/run_scrape"}:
+        from main import trigger_scrape
+
+        _, msg = trigger_scrape(chat_id=chat_id)
+        return msg
+
+    if cmd in {"/help", "/start"}:
+        return (
+            "<b>SS Scraper Bot Commands:</b>\n\n"
+            "• <code>/scrape</code> - Trigger scraper manually\n"
+            "• <code>/districts</code> - View current monitored districts\n"
+            "• <code>/districts &lt;districts&gt;</code> - Update monitored districts (e.g. <code>/districts centre, mezciems</code>)\n"
+            "• <code>/reset_districts</code> - Reset districts to default\n"
+            "• <code>/help</code> - Show this help message"
+        )
+
+    return "Unknown command. Use /scrape, /districts, or /reset_districts."
 
 
 def handle_telegram_update(update):
@@ -87,6 +109,7 @@ def handle_telegram_update(update):
         return None
 
     response_text = handle_district_command(text)
+    response_text = handle_district_command(text, chat_id=chat_id)
     return {"chat_id": chat_id, "text": response_text}
 
 
