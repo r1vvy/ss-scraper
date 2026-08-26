@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import urllib.parse
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -30,13 +31,41 @@ DB_PATH = as_path(os.getenv("SS_DB_PATH", BASE_DIR / "ss_listings.db"))
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID_HERE").strip()
 
+
+def resolve_db_url(raw_url=None, password=None):
+    url = (raw_url if raw_url is not None else os.getenv("DB_URL") or "").strip()
+    if not url:
+        return None
+    pwd = (password if password is not None else os.getenv("DB_PASSWORD") or "").strip()
+
+    # If placeholder is present and password is provided, substitute it
+    if "[YOUR-PASSWORD]" in url and pwd:
+        encoded_pwd = urllib.parse.quote_plus(pwd)
+        url = url.replace("[YOUR-PASSWORD]", encoded_pwd)
+
+    # Automatically and safely encode unencoded special characters in the URL password
+    if "://" in url and "@" in url:
+        scheme, _, rest = url.partition("://")
+        user_info, _, host_info = rest.rpartition("@")
+        if ":" in user_info:
+            user, _, raw_pwd = user_info.partition(":")
+            if raw_pwd and raw_pwd != "[YOUR-PASSWORD]":
+                decoded_pwd = urllib.parse.unquote(raw_pwd)
+                safe_pwd = urllib.parse.quote_plus(decoded_pwd)
+                url = f"{scheme}://{user}:{safe_pwd}@{host_info}"
+
+    return url
+
+
 DB_URL = os.getenv("DB_URL")
 if DB_URL:
     DB_URL = DB_URL.strip()
 
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+
 # If DB_URL is set, use Postgres (Supabase). Otherwise fall back to SQLite.
-FINAL_DB_URL = DB_URL
-USE_POSTGRES = bool(FINAL_DB_URL)
+FINAL_DB_URL = resolve_db_url(DB_URL, DB_PASSWORD)
+USE_POSTGRES = bool(FINAL_DB_URL and "[YOUR-PASSWORD]" not in FINAL_DB_URL)
 
 
 def normalize_district_name(value):
