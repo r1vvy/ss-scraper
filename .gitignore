@@ -13,3 +13,4 @@ __pycache__/
 ss_com_listings.json
 districts.json
 ss_listings.db
+__pycache__

@@ -78,3 +78,20 @@ def test_format_telegram_card_includes_summary_and_link():
     assert "Address 1" in message
     assert "View on SS.com" in message
     assert "https://www.ss.com/listing.html" in message
+
+
+def test_run_scraper_handles_network_errors(monkeypatch, tmp_path):
+    import requests
+    from main import run_scraper
+
+    db_path = tmp_path / "test.db"
+    monkeypatch.setattr("db.DB_PATH", str(db_path))
+    monkeypatch.setattr("config.DB_PATH", str(db_path))
+
+    def failing_fetch(*args, **kwargs):
+        raise requests.RequestException("Simulated connection failure")
+
+    monkeypatch.setattr("main.fetch_page", failing_fetch)
+    # Should not raise exception
+    count = run_scraper()
+    assert count == 0

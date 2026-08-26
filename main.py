@@ -11,7 +11,7 @@ from scraper import fetch_page, get_total_pages, parse_listings_from_page
 from telegram import format_telegram_card, run_telegram_listener, send_telegram_message
 
 
-def run_scraper():
+def run_scraper(notify_chat_id=None):
     init_db()
     is_first_run = get_total_saved_count() == 0
     target_urls = get_target_urls()
@@ -27,13 +27,22 @@ def run_scraper():
     for district_index, base_url in enumerate(target_urls, start=1):
         print(f"Fetching listings for district {district_index}/{len(target_urls)}: {base_url}")
 
-        first_page = fetch_page(session, base_url)
+        try:
+            first_page = fetch_page(session, base_url)
+        except requests.RequestException as err:
+            print(f"Error fetching district {base_url}: {err}")
+            continue
+
         total_pages = get_total_pages(first_page)
         print(f"Total pages identified: {total_pages}")
 
         for page_number in range(1, total_pages + 1):
             page_url = base_url if page_number == 1 else f"{base_url}page{page_number}.html"
-            soup = first_page if page_number == 1 else fetch_page(session, page_url)
+            try:
+                soup = first_page if page_number == 1 else fetch_page(session, page_url)
+            except requests.RequestException as err:
+                print(f"Error fetching page {page_url}: {err}")
+                continue
 
             page_data = parse_listings_from_page(soup)
             print(f"Scraping page {page_number}/{total_pages}: {page_url}")
@@ -49,7 +58,7 @@ def run_scraper():
 
                 if not is_first_run:
                     message = format_telegram_card(item)
-                    send_telegram_message(message)
+                    send_telegram_message(message, chat_id=notify_chat_id)
                     time.sleep(1)
 
             if page_number < total_pages:
@@ -76,7 +85,7 @@ def trigger_scrape(chat_id=None):
 
     def _worker():
         try:
-            total_new = run_scraper()
+            total_new = run_scraper(notify_chat_id=chat_id)
             if chat_id:
                 if total_new == 0:
                     send_telegram_message("✅ Scraping complete. No new listings found.", chat_id=chat_id)
@@ -113,3 +122,10 @@ def start_background_services():
 if __name__ == "__main__":
     start_background_services()
     run_scraper()
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_TOKEN != "YOUR_BOT_TOKEN_HERE":
+        print("Telegram bot listener active. Press Ctrl+C to exit.")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("Shutting down...")

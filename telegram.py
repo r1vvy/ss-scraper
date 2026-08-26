@@ -52,7 +52,7 @@ def format_telegram_card(item):
     )
 
 
-def handle_district_command(command_text):
+def handle_district_command(command_text, chat_id=None):
     text = (command_text or "").strip()
     if not text:
         return "Please provide a command. Use /help for available commands."
@@ -149,11 +149,14 @@ def run_telegram_listener():
 
     last_update_id = None
     while True:
-        updates = fetch_updates(offset=last_update_id)
-        for update in updates:
-            update_id = update.get("update_id")
-            process_telegram_command(update)
-            if update_id is not None:
-                last_update_id = update_id + 1
+        try:
+            updates = fetch_updates(offset=last_update_id)
+            for update in updates:
+                update_id = update.get("update_id")
+                process_telegram_command(update)
+                if update_id is not None:
+                    last_update_id = update_id + 1
+        except Exception as exc:
+            logger.exception("Error in Telegram listener polling loop: %s", exc)
 
         time.sleep(5)
