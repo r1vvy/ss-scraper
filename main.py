@@ -32,7 +32,6 @@ logger = logging.getLogger("ss_scraper.main")
 def run_scraper(notify_chat_id=None):
     init_db()
     total_saved_before = get_total_saved_count()
-    is_first_run = total_saved_before == 0
     target_urls = get_target_urls()
     districts = load_districts()
     filters = load_filters()
@@ -48,9 +47,8 @@ def run_scraper(notify_chat_id=None):
     fetch_errors = []
 
     logger.info(
-        "Starting scrape run (existing_db_listings=%d, is_first_run=%s, districts_count=%d, active_filters=%s)",
+        "Starting scrape run (existing_db_listings=%d, districts_count=%d, active_filters=%s)",
         total_saved_before,
-        is_first_run,
         len(target_urls),
         active_filters,
     )
@@ -95,10 +93,8 @@ def run_scraper(notify_chat_id=None):
                 save_listing(item)
                 total_new_listings += 1
 
-                if not is_first_run:
-                    message = format_telegram_card(item)
-                    send_telegram_message(message, chat_id=notify_chat_id)
-                    time.sleep(1)
+                message = format_telegram_card(item)
+                send_telegram_message(message, chat_id=notify_chat_id)
 
             if page_number < total_pages:
                 time.sleep(random.uniform(*REQUEST_DELAY_RANGE))

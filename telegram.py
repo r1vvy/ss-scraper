@@ -1,9 +1,11 @@
 import html
 import logging
+import threading
 import time
 
 import requests
 from functools import lru_cache
+from tenacity import retry, retry_if_exception_type, stop_after_attempt
 
 from config import (
     DEFAULT_DISTRICTS,
@@ -159,12 +161,60 @@ def handle_telegram_update(update):
     return {"chat_id": chat_id, "text": response_text}
 
 
-def send_telegram_message(text, chat_id=None):
-    """Sends an HTML formatted message to Telegram."""
+_last_telegram_send_time = 0.0
+_send_lock = threading.Lock()
+
+
+class TelegramRateLimitError(Exception):
+    def __init__(self, retry_after=3):
+        self.retry_after = retry_after
+        super().__init__(f"Telegram Rate Limit (retry after {retry_after}s)")
+
+
+def _wait_telegram_retry(retry_state):
+    exc = retry_state.outcome.exception()
+    if isinstance(exc, TelegramRateLimitError):
+        return float(exc.retry_after + 1)
+    return 2.0
+
+
+@retry(
+    stop=stop_after_attempt(5),
+    wait=_wait_telegram_retry,
+    retry=retry_if_exception_type((TelegramRateLimitError, requests.RequestException)),
+    reraise=False,
+)
+def _send_telegram_http_request(url, payload):
+    global _last_telegram_send_time
+
+    with _send_lock:
+        now = time.time()
+        elapsed = now - _last_telegram_send_time
+        if elapsed < 1.05:
+            time.sleep(1.05 - elapsed)
+        _last_telegram_send_time = time.time()
+
+    response = requests.post(url, json=payload, timeout=10)
+    if response.status_code == 429:
+        retry_after = 3
+        try:
+            res_json = response.json()
+            retry_after = int(res_json.get("parameters", {}).get("retry_after", 3))
+        except Exception:
+            pass
+        logger.warning("Telegram API rate limit (429) encountered. Retrying after %d seconds...", retry_after)
+        raise TelegramRateLimitError(retry_after)
+
+    response.raise_for_status()
+    return True
+
+
+def send_telegram_message(text, chat_id=None, max_retries=5):
+    """Sends an HTML formatted message to Telegram with 429 rate limit backoff using Tenacity."""
     target_chat_id = chat_id if chat_id is not None else TELEGRAM_CHAT_ID
     if TELEGRAM_BOT_TOKEN == "YOUR_BOT_TOKEN_HERE" or target_chat_id in {None, "YOUR_CHAT_ID_HERE"}:
         logger.warning("Telegram not configured. Skipping message send.")
-        return
+        return False
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -175,14 +225,10 @@ def send_telegram_message(text, chat_id=None):
     }
 
     try:
-        response = requests.post(url, json=payload, timeout=10)
-        response.raise_for_status()
-    except requests.HTTPError as exc:
-        status = getattr(exc.response, "status_code", None)
-        body = exc.response.text if exc.response is not None else ""
-        logger.exception("Failed to send Telegram message: %s %s", status, body)
-    except requests.RequestException as exc:
-        logger.exception("Failed to send Telegram message: %s", exc)
+        return bool(_send_telegram_http_request(url, payload))
+    except Exception as exc:
+        logger.exception("Failed to send Telegram message after retries: %s", exc)
+        return False
 
 
 def process_telegram_command(update):

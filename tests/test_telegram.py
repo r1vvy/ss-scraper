@@ -82,3 +82,26 @@ def test_trigger_scrape_prevents_concurrent_runs(monkeypatch):
     finally:
         main._scrape_lock.release()
 
+
+def test_send_telegram_message_retries_on_429(monkeypatch):
+    from telegram import send_telegram_message
+
+    monkeypatch.setattr("telegram.TELEGRAM_BOT_TOKEN", "12345:dummytoken")
+    monkeypatch.setattr("telegram.TELEGRAM_CHAT_ID", "99999")
+    monkeypatch.setattr("time.sleep", lambda secs: None)
+
+    response_429 = MagicMock()
+    response_429.status_code = 429
+    response_429.json.return_value = {"ok": False, "error_code": 429, "parameters": {"retry_after": 2}}
+
+    response_200 = MagicMock()
+    response_200.status_code = 200
+    response_200.raise_for_status.return_value = None
+
+    mock_post = MagicMock(side_effect=[response_429, response_200])
+    monkeypatch.setattr("requests.post", mock_post)
+
+    success = send_telegram_message("Test message", chat_id="99999")
+    assert success is True
+    assert mock_post.call_count == 2
+

@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml /app/
 
 RUN python -m pip install --upgrade pip
-RUN pip install SQLAlchemy psycopg2-binary requests beautifulsoup4 flask gunicorn
+RUN pip install SQLAlchemy psycopg2-binary requests beautifulsoup4 flask gunicorn tenacity
 
 COPY . /app
 
