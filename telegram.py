@@ -53,17 +53,13 @@ def format_telegram_card(item):
 
 
 def handle_district_command(command_text):
-def handle_district_command(command_text, chat_id=None):
     text = (command_text or "").strip()
     if not text:
-        return "Please provide a district, for example: /districts centre, mezciems"
         return "Please provide a command. Use /help for available commands."
 
     command, _, args = text.partition(" ")
-    command = command.lower()
     cmd = command.partition("@")[0].lower()
 
-    if command in {"/districts", "/district"}:
     if cmd in {"/districts", "/district"}:
         if not args.strip():
             current = ", ".join(load_districts()) or ", ".join(DEFAULT_DISTRICTS)
@@ -72,12 +68,10 @@ def handle_district_command(command_text, chat_id=None):
         districts = save_districts(args)
         return f"Updated districts: {', '.join(districts)}"
 
-    if command in {"/reset_districts", "/resetdistricts"}:
     if cmd in {"/reset_districts", "/resetdistricts"}:
         districts = save_districts(DEFAULT_DISTRICTS)
         return f"Reset districts to: {', '.join(districts)}"
 
-    return "Unknown command. Use /districts or /reset_districts."
     if cmd in {"/scrape", "/run", "/run_scrape"}:
         from main import trigger_scrape
 
@@ -108,7 +102,6 @@ def handle_telegram_update(update):
     if not text.startswith("/"):
         return None
 
-    response_text = handle_district_command(text)
     response_text = handle_district_command(text, chat_id=chat_id)
     return {"chat_id": chat_id, "text": response_text}
 
