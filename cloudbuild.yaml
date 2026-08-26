@@ -21,7 +21,7 @@ steps:
       - 'deploy'
       - 'ss-scraper'
       - '--image=gcr.io/$PROJECT_ID/ss-scraper:$SHORT_SHA'
-      - '--region=us-central1'
+      - '--region=europe-north1'
       - '--platform=managed'
       - '--allow-unauthenticated'
       - '--service-account=ss-scraper-run-sa@$PROJECT_ID.iam.gserviceaccount.com'

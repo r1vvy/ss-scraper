@@ -98,43 +98,41 @@ def is_scraping_running() -> bool:
     return _scrape_lock.locked()
 
 
-def trigger_scrape(chat_id=None):
-    """Starts scraper in a background thread if not already running."""
+def trigger_scrape(chat_id=None, async_run=False):
+    """Executes the scraper (synchronous by default to keep Cloud Run CPU active)."""
     if not _scrape_lock.acquire(blocking=False):
         return False, "⚠️ A scrape is already in progress. Please wait for it to finish."
 
     districts = load_districts()
     districts_str = ", ".join(districts)
 
-    def _worker():
+    def _execute():
         try:
             total_new, errors = run_scraper(notify_chat_id=chat_id)
-            if chat_id:
-                if errors:
-                    err_summary = f"\n⚠️ Encountered {len(errors)} fetch error(s) (check logs)."
-                else:
-                    err_summary = ""
+            err_summary = f"\n⚠️ Encountered {len(errors)} fetch error(s) (check logs)." if errors else ""
 
-                if total_new == 0:
-                    send_telegram_message(
-                        f"✅ Scraping complete. No new listings found.{err_summary}",
-                        chat_id=chat_id,
-                    )
-                else:
-                    send_telegram_message(
-                        f"✅ Scraping complete. Found <b>{total_new}</b> new listing(s).{err_summary}",
-                        chat_id=chat_id,
-                    )
+            if total_new == 0:
+                msg = f"✅ Scraping complete for <b>{html.escape(districts_str)}</b>. No new listings found.{err_summary}"
+            else:
+                msg = f"✅ Scraping complete for <b>{html.escape(districts_str)}</b>. Found <b>{total_new}</b> new listing(s).{err_summary}"
+            return True, msg
         except Exception as exc:
             logger.exception("Error during scrape: %s", exc)
-            if chat_id:
-                send_telegram_message(f"❌ Error during scrape: {html.escape(str(exc))}", chat_id=chat_id)
+            return False, f"❌ Error during scrape: {html.escape(str(exc))}"
         finally:
             _scrape_lock.release()
 
-    thread = threading.Thread(target=_worker, name="manual-scrape-worker", daemon=True)
-    thread.start()
-    return True, f"🚀 Scrape started for districts: <b>{html.escape(districts_str)}</b>"
+    if async_run:
+        def _worker():
+            _, msg = _execute()
+            if chat_id:
+                send_telegram_message(msg, chat_id=chat_id)
+
+        thread = threading.Thread(target=_worker, name="manual-scrape-worker", daemon=True)
+        thread.start()
+        return True, f"🚀 Scrape started for districts: <b>{html.escape(districts_str)}</b>"
+
+    return _execute()
 
 
 def start_background_services():

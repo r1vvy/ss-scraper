@@ -103,11 +103,10 @@ def run_scrape():
             abort(403)
 
     logger.info("run-scrape requested by %s", request.remote_addr)
-    started, msg = trigger_scrape()
-    if not started:
-        return (msg, 409)
-    logger.info("scrape thread started")
-    return ("Scrape started", 202)
+    success, msg = trigger_scrape()
+    status_code = 200 if success else 409
+    logger.info("run-scrape finished: %s", msg)
+    return (msg, status_code)
 
 
 @app.route("/health", methods=["GET"])

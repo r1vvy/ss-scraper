@@ -119,7 +119,7 @@ gcloud builds submit --tag gcr.io/$PROJECT_ID/ss-scraper
 
 ```bash
 gcloud run deploy ss-scraper --image gcr.io/$PROJECT_ID/ss-scraper \
-	--region=us-central1 --allow-unauthenticated \
+	--region=europe-north1 --allow-unauthenticated \
 	--set-env-vars DB_URL="$DB_URL",TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN",TELEGRAM_CHAT_ID="$TELEGRAM_CHAT_ID",TELEGRAM_WEBHOOK_SECRET="$TELEGRAM_WEBHOOK_SECRET"
 ```
 
