@@ -25,7 +25,7 @@ HEADER_ROW_2 = ["", "", "", "", "", "", "Emils", "Estere", "Emils", "Estere"]
 
 
 def format_listing_row(item: Dict[str, Any], nr: int) -> List[Any]:
-    """Formats listing item dictionary into Google Sheet row values."""
+    """Formats listing item dictionary into Google Sheet row values (Columns A through H)."""
     from config import extract_number
 
     price_val = extract_number(item.get("price_monthly"))
@@ -38,16 +38,14 @@ def format_listing_row(item: Dict[str, Any], nr: int) -> List[Any]:
     rooms = rooms_val if rooms_val is not None else item.get("rooms", "")
 
     return [
-        nr,
-        item.get("url", ""),
-        price,
-        area,
-        rooms,
-        item.get("address", ""),
-        "FALSE",
-        "FALSE",
-        "",
-        "",
+        nr,                         # Col A (1): Nr
+        item.get("url", ""),        # Col B (2): Links
+        price,                      # Col C (3): Cena, EUR
+        area,                       # Col D (4): Platība, m2
+        rooms,                      # Col E (5): Istabas
+        item.get("address", ""),    # Col F (6): Adrese
+        "FALSE",                    # Col G (7): Apskatits (Emils)
+        "FALSE",                    # Col H (8): Apskatits (Estere)
     ]
 
 
@@ -176,6 +174,11 @@ class GoogleSheetsClient:
         try:
             all_values = ws.get_all_values()
 
+            # Ensure first 2 rows exist for headings so listings start from Row 3
+            while len(all_values) < 2:
+                ws.append_row([], value_input_option="USER_ENTERED")
+                all_values.append([])
+
             # Check if URL already exists in this worksheet to avoid duplicates
             url = item.get("url", "").strip()
             if url:
@@ -184,8 +187,8 @@ class GoogleSheetsClient:
                     logger.debug("Listing url=%s already exists in worksheet '%s'. Skipping duplicate append.", url, ws.title)
                     return True
 
-            # Calculate Nr based on existing data rows with numeric IDs
-            data_rows_count = len([r for r in all_values if r and str(r[0]).strip().isdigit()])
+            # Calculate Nr based on data rows starting from Row 3
+            data_rows_count = max(0, len(all_values) - 2)
             nr = data_rows_count + 1
 
             row_data = format_listing_row(item, nr)

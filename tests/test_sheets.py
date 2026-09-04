@@ -32,8 +32,6 @@ def test_format_listing_row_values():
         "Silciema 11",
         "FALSE",
         "FALSE",
-        "",
-        "",
     ]
 
 
@@ -67,7 +65,7 @@ def test_append_to_sheets_unconfigured_does_not_raise():
 def test_google_sheets_client_append_listing_with_mock_gspread():
     mock_ws = MagicMock()
     mock_ws.title = "Yugla"
-    mock_ws.get_all_values.return_value = []
+    mock_ws.get_all_values.return_value = [["Header1"], ["Header2"]]
 
     mock_spreadsheet = MagicMock()
     mock_spreadsheet.worksheet.return_value = mock_ws
@@ -93,7 +91,7 @@ def test_google_sheets_client_append_listing_with_mock_gspread():
     result = client.append_listing(item)
 
     assert result is True
-    # Verify calculated Nr is 1
+    # Verify calculated Nr is 1 (appended on Row 3)
     mock_ws.append_row.assert_called_once_with(
         [
             1,
@@ -104,8 +102,6 @@ def test_google_sheets_client_append_listing_with_mock_gspread():
             "Silciema 11",
             "FALSE",
             "FALSE",
-            "",
-            "",
         ],
         value_input_option="USER_ENTERED",
     )
