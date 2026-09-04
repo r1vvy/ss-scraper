@@ -17,7 +17,7 @@ def get_engine():
 
 
 def init_db():
-    schema = """
+    schema_listings = """
     CREATE TABLE IF NOT EXISTS public.listings (
         id TEXT PRIMARY KEY,
         category TEXT,
@@ -37,20 +37,59 @@ def init_db():
     )
     """
 
-    logger.info("Initializing PostgreSQL DB schema (public.listings)")
+    schema_config = """
+    CREATE TABLE IF NOT EXISTS public.app_config (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )
+    """
+
+    logger.info("Initializing PostgreSQL DB schema (public.listings & public.app_config)")
 
     try:
         engine = get_engine()
         with engine.begin() as conn:
-            conn.execute(text(schema))
+            conn.execute(text(schema_listings))
+            conn.execute(text(schema_config))
             try:
                 conn.execute(text("ALTER TABLE public.listings ADD COLUMN notified BOOLEAN DEFAULT FALSE"))
             except Exception:
                 pass
-        logger.info("Database schema ready (public.listings)")
+        logger.info("Database schema ready (public.listings & public.app_config)")
     except Exception:
         logger.exception("Database init failed: schema creation or initialization error")
         raise
+
+
+
+def db_load_app_config(key):
+    try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT value FROM public.app_config WHERE key = :key"), {"key": key})
+            row = result.fetchone()
+            return row[0] if row else None
+    except Exception:
+        logger.debug("Failed to fetch app_config key=%s from DB", key)
+        return None
+
+
+def db_save_app_config(key, value):
+    stmt = text(
+        """
+        INSERT INTO public.app_config (key, value)
+        VALUES (:key, :value)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """
+    )
+    try:
+        engine = get_engine()
+        with engine.begin() as conn:
+            conn.execute(stmt, {"key": key, "value": str(value)})
+        logger.info("Saved app_config key=%s to database", key)
+    except Exception:
+        logger.exception("Failed to save app_config key=%s to database", key)
+
 
 
 

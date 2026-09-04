@@ -107,16 +107,33 @@ DEFAULT_FILTERS = {
 
 
 def load_config():
-    if not CONFIG_PATH.exists():
-        return {"districts": list(DEFAULT_DISTRICTS), "filters": dict(DEFAULT_FILTERS)}
-
+    payload = {}
     try:
-        with CONFIG_PATH.open("r", encoding="utf-8") as file:
-            payload = json.load(file)
-            if not isinstance(payload, dict):
-                payload = {}
-    except (json.JSONDecodeError, OSError):
-        payload = {}
+        from db import db_load_app_config
+
+        db_districts = db_load_app_config("districts")
+        db_filters = db_load_app_config("filters")
+        if db_districts is not None:
+            try:
+                payload["districts"] = json.loads(db_districts)
+            except Exception:
+                pass
+        if db_filters is not None:
+            try:
+                payload["filters"] = json.loads(db_filters)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    if not payload and CONFIG_PATH.exists():
+        try:
+            with CONFIG_PATH.open("r", encoding="utf-8") as file:
+                file_payload = json.load(file)
+                if isinstance(file_payload, dict):
+                    payload = file_payload
+        except (json.JSONDecodeError, OSError):
+            payload = {}
 
     districts = normalize_districts(payload.get("districts", DEFAULT_DISTRICTS)) or list(DEFAULT_DISTRICTS)
     raw_filters = payload.get("filters", {})
@@ -145,11 +162,25 @@ def save_config(districts=None, filters=None):
                 updated_f[k] = str(v).strip() if v is not None else ""
         current["filters"] = updated_f
 
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with CONFIG_PATH.open("w", encoding="utf-8") as file:
-        json.dump(current, file, indent=2)
+    # Try saving to PostgreSQL DB
+    try:
+        from db import db_save_app_config
+
+        db_save_app_config("districts", json.dumps(current["districts"]))
+        db_save_app_config("filters", json.dumps(current["filters"]))
+    except Exception:
+        pass
+
+    # Save to local file backup
+    try:
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with CONFIG_PATH.open("w", encoding="utf-8") as file:
+            json.dump(current, file, indent=2)
+    except OSError:
+        pass
 
     return current
+
 
 
 def load_districts():

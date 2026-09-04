@@ -80,3 +80,12 @@ def test_notified_status_and_helpers():
     assert db.get_unnotified_count() == 0
     assert len(db.get_unnotified_listings(limit=10)) == 0
 
+
+def test_db_app_config():
+    db.init_db()
+
+    assert db.db_load_app_config("test_key") is None
+    db.db_save_app_config("test_key", "test_value")
+    assert db.db_load_app_config("test_key") == "test_value"
+
+
