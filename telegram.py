@@ -48,6 +48,7 @@ def format_telegram_card(item):
 def flush_pending_notifications(chat_id=None, limit=None):
     from config import MAX_NOTIFICATIONS_PER_BATCH
     from db import get_unnotified_listings, mark_listing_notified
+    from sheets import append_to_sheets_if_enabled
 
     batch_limit = limit if limit is not None else MAX_NOTIFICATIONS_PER_BATCH
     pending_items = get_unnotified_listings(limit=batch_limit)
@@ -59,6 +60,7 @@ def flush_pending_notifications(chat_id=None, limit=None):
         message = format_telegram_card(item)
         success = send_telegram_message(message, chat_id=chat_id)
         if success:
+            append_to_sheets_if_enabled(item)
             mark_listing_notified(item["id"])
             sent_count += 1
         else:
@@ -148,11 +150,17 @@ def handle_district_command(command_text, chat_id=None):
         _, msg = trigger_scrape(chat_id=chat_id, async_run=True)
         return msg
 
+    if cmd in {"/sync_sheets", "/syncsheets", "/sync"}:
+        from sheets import sync_db_listings_to_sheets
+
+        synced, total = sync_db_listings_to_sheets()
+        return f"📊 Synced <b>{synced}/{total}</b> listing(s) from database to Google Sheets."
 
     if cmd in {"/help", "/start"}:
         return (
             "<b>SS Scraper Bot Commands:</b>\n\n"
             "• <code>/scrape</code> - Trigger scraper manually\n"
+            "• <code>/sync_sheets</code> - Export all saved listings to Google Sheets\n"
             "• <code>/districts</code> - View or update monitored districts\n"
             "• <code>/reset_districts</code> - Reset districts to default\n"
             "• <code>/filter</code> - View or set search filters (price, rooms, area, floor)\n"
@@ -160,7 +168,7 @@ def handle_district_command(command_text, chat_id=None):
             "• <code>/help</code> - Show this help message"
         )
 
-    return "Unknown command. Use /scrape, /districts, /filter, or /help."
+    return "Unknown command. Use /scrape, /sync_sheets, /districts, /filter, or /help."
 
 
 def handle_telegram_update(update):

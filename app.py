@@ -136,6 +136,22 @@ def flush_notifications():
     return (msg, 200)
 
 
+@app.route("/sync-sheets", methods=["POST", "GET"])
+def sync_sheets():
+    webhook_secret = get_secret("TELEGRAM_WEBHOOK_SECRET")
+    if webhook_secret:
+        secret = request.args.get("secret") or request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+        if secret != webhook_secret:
+            abort(403)
+
+    from sheets import sync_db_listings_to_sheets
+
+    synced, total = sync_db_listings_to_sheets()
+    msg = f"Synced {synced}/{total} listing(s) from database to Google Sheets."
+    logger.info("sync-sheets finished: %s", msg)
+    return (msg, 200)
+
+
 @app.route("/health", methods=["GET"])
 def health():
     logger.debug("health check")

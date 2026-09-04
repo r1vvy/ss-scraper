@@ -33,7 +33,8 @@ def init_db():
         price_per_sqm TEXT,
         price_monthly TEXT,
         url TEXT,
-        notified BOOLEAN DEFAULT FALSE
+        notified BOOLEAN DEFAULT FALSE,
+        sheets_synced BOOLEAN DEFAULT FALSE
     )
     """
 
@@ -84,6 +85,11 @@ def init_db():
                 logger.info("Column 'notified' missing from listings table. Adding...")
                 with engine.begin() as conn:
                     conn.execute(text("ALTER TABLE public.listings ADD COLUMN notified BOOLEAN DEFAULT FALSE"))
+
+            if cols and "sheets_synced" not in cols:
+                logger.info("Column 'sheets_synced' missing from listings table. Adding...")
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE public.listings ADD COLUMN sheets_synced BOOLEAN DEFAULT FALSE"))
 
         logger.info("Database schema check complete. Ready.")
     except Exception:
@@ -144,20 +150,20 @@ def is_id_seen(listing_id):
         raise
 
 
-def save_listing(item, notified=False):
+def save_listing(item, notified=False, sheets_synced=False):
     listing_id = item.get("id", "")
-    logger.debug("Saving listing id=%s district=%s notified=%s", listing_id, item.get("district", ""), notified)
+    logger.debug("Saving listing id=%s district=%s notified=%s sheets_synced=%s", listing_id, item.get("district", ""), notified, sheets_synced)
 
     stmt = text(
         """
         INSERT INTO public.listings (
             id, category, subcategory, city, district, address, rooms,
             area_sqm, floor, series, price_per_sqm, price_monthly,
-            url, notified
+            url, notified, sheets_synced
         ) VALUES (
             :id, :category, :subcategory, :city, :district, :address, :rooms,
             :area_sqm, :floor, :series, :price_per_sqm, :price_monthly,
-            :url, :notified
+            :url, :notified, :sheets_synced
         ) ON CONFLICT (id) DO NOTHING
         """
     )
@@ -177,13 +183,14 @@ def save_listing(item, notified=False):
         "price_monthly": item.get("price_monthly", ""),
         "url": item.get("url", ""),
         "notified": bool(notified),
+        "sheets_synced": bool(sheets_synced),
     }
 
     try:
         engine = get_engine()
         with engine.begin() as conn:
             conn.execute(stmt, params)
-        logger.info("Saved listing id=%s to public.listings (notified=%s)", listing_id, notified)
+        logger.info("Saved listing id=%s to public.listings (notified=%s, sheets_synced=%s)", listing_id, notified, sheets_synced)
     except Exception:
         logger.exception("Database save failed for listing id=%s", listing_id)
         raise
@@ -202,6 +209,19 @@ def mark_listing_notified(listing_id):
         raise
 
 
+def mark_listing_sheets_synced(listing_id):
+    if not listing_id:
+        return
+    try:
+        engine = get_engine()
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE public.listings SET sheets_synced = TRUE WHERE id = :id"), {"id": listing_id})
+        logger.debug("Marked listing id=%s as sheets_synced", listing_id)
+    except Exception:
+        logger.exception("Database update failed for marking listing id=%s as sheets_synced", listing_id)
+        raise
+
+
 def get_unnotified_listings(limit=10):
     try:
         engine = get_engine()
@@ -211,7 +231,7 @@ def get_unnotified_listings(limit=10):
                     """
                     SELECT id, category, subcategory, city, district, address,
                            rooms, area_sqm, floor, series, price_per_sqm,
-                           price_monthly, url, notified
+                           price_monthly, url, notified, sheets_synced
                     FROM public.listings
                     WHERE notified = FALSE OR notified IS NULL
                     ORDER BY id DESC
@@ -225,7 +245,6 @@ def get_unnotified_listings(limit=10):
     except Exception:
         logger.exception("Failed to query unnotified listings from database")
         return []
-
 
 
 def get_unnotified_count():
@@ -242,6 +261,31 @@ def get_unnotified_count():
     except Exception:
         logger.exception("Failed to query unnotified listing count")
         return 0
+
+
+def get_unsynced_listings(limit=50):
+    try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            result = conn.execute(
+                text(
+                    """
+                    SELECT id, category, subcategory, city, district, address,
+                           rooms, area_sqm, floor, series, price_per_sqm,
+                           price_monthly, url, notified, sheets_synced
+                    FROM public.listings
+                    WHERE sheets_synced = FALSE OR sheets_synced IS NULL
+                    ORDER BY id ASC
+                    LIMIT :limit
+                    """
+                ),
+                {"limit": limit},
+            )
+            rows = result.mappings().all()
+            return [dict(r) for r in rows]
+    except Exception:
+        logger.exception("Failed to query unsynced listings from database")
+        return []
 
 
 def get_total_saved_count():

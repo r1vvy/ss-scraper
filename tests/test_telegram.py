@@ -47,6 +47,15 @@ def test_handle_district_command_scrape_trigger(monkeypatch):
     mock_trigger.assert_called_once_with(chat_id="12345", async_run=True)
 
 
+def test_handle_district_command_sync_sheets(monkeypatch):
+    mock_sync = MagicMock(return_value=(15, 15))
+    monkeypatch.setattr("sheets.sync_db_listings_to_sheets", mock_sync)
+
+    result = handle_district_command("/sync_sheets")
+    assert "Synced <b>15/15</b> listing(s)" in result
+    mock_sync.assert_called_once()
+
+
 def test_handle_district_command_with_bot_username(monkeypatch):
     mock_trigger = MagicMock(return_value=(True, "🚀 Scrape started"))
     monkeypatch.setattr("main.trigger_scrape", mock_trigger)

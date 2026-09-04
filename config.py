@@ -33,6 +33,7 @@ GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "").strip()
 GOOGLE_SHEETS_FOLDER_NAME = os.getenv("GOOGLE_SHEETS_FOLDER_NAME", "").strip()
 GOOGLE_SHEETS_FOLDER_ID = os.getenv("GOOGLE_SHEETS_FOLDER_ID", "").strip()
 GOOGLE_SPREADSHEET_NAME = os.getenv("GOOGLE_SPREADSHEET_NAME", "SS.com Real Estate Listings").strip()
+GOOGLE_SPREADSHEET_ID = os.getenv("GOOGLE_SPREADSHEET_ID", os.getenv("GOOGLE_SHEET_ID", "")).strip()
 
 
 

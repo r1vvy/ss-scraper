@@ -104,7 +104,7 @@ class GoogleSheetsClient:
         try:
             creds = self._get_credentials()
             self.client = gspread.authorize(creds)
-            self.spreadsheet = self._get_or_create_spreadsheet()
+            self.spreadsheet = self._open_spreadsheet()
             logger.info("Successfully connected to Google Sheet: '%s'", self.spreadsheet.title)
             return True
         except Exception as exc:
@@ -113,79 +113,16 @@ class GoogleSheetsClient:
             self.spreadsheet = None
             return False
 
-    def _resolve_folder_id(self) -> Optional[str]:
-        if self.folder_id:
-            return self.folder_id
+    def _open_spreadsheet(self):
+        if self.spreadsheet_id:
+            logger.info("Opening Google Sheet by ID: %s", self.spreadsheet_id)
+            return self.client.open_by_key(self.spreadsheet_id)
 
-        if not self.folder_name or not self.client:
-            return None
+        if self.spreadsheet_name:
+            logger.info("Opening Google Sheet by title: '%s'", self.spreadsheet_name)
+            return self.client.open(self.spreadsheet_name)
 
-        # Search for folder by name using Drive API via gspread client
-        try:
-            query = f"mimeType='application/vnd.google-apps.folder' and name='{self.folder_name}' and trashed=false"
-            res = self.client.http_client.request(
-                "GET",
-                f"https://www.googleapis.com/drive/v3/files?q={query}"
-            )
-            data = json.loads(res.content.decode("utf-8"))
-            files = data.get("files", [])
-            if files:
-                folder_id = files[0]["id"]
-                logger.info("Resolved Google Drive folder '%s' -> ID: %s", self.folder_name, folder_id)
-                self.folder_id = folder_id
-                return folder_id
-            else:
-                # Create folder if it doesn't exist
-                body = {
-                    "name": self.folder_name,
-                    "mimeType": "application/vnd.google-apps.folder"
-                }
-                res = self.client.http_client.request(
-                    "POST",
-                    "https://www.googleapis.com/drive/v3/files",
-                    body=json.dumps(body),
-                    headers={"Content-Type": "application/json"}
-                )
-                data = json.loads(res.content.decode("utf-8"))
-                folder_id = data.get("id")
-                logger.info("Created Google Drive folder '%s' -> ID: %s", self.folder_name, folder_id)
-                self.folder_id = folder_id
-                return folder_id
-        except Exception as exc:
-            logger.warning("Could not resolve/create Google Drive folder '%s': %s", self.folder_name, exc)
-            return None
-
-    def _get_or_create_spreadsheet(self):
-        folder_id = self._resolve_folder_id()
-
-        # Check if spreadsheet exists
-        try:
-            if folder_id:
-                query = f"mimeType='application/vnd.google-apps.spreadsheet' and name='{self.spreadsheet_name}' and '{folder_id}' in parents and trashed=false"
-                res = self.client.http_client.request(
-                    "GET",
-                    f"https://www.googleapis.com/drive/v3/files?q={query}"
-                )
-                data = json.loads(res.content.decode("utf-8"))
-                files = data.get("files", [])
-                if files:
-                    return self.client.open_by_key(files[0]["id"])
-            else:
-                try:
-                    return self.client.open(self.spreadsheet_name)
-                except gspread.SpreadsheetNotFound:
-                    pass
-        except Exception as exc:
-            logger.debug("Spreadsheet search failed, attempting creation: %s", exc)
-
-        # Create new spreadsheet
-        if folder_id:
-            sh = self.client.create(self.spreadsheet_name, folder_id=folder_id)
-        else:
-            sh = self.client.create(self.spreadsheet_name)
-
-        logger.info("Created new spreadsheet '%s' (ID: %s)", self.spreadsheet_name, sh.id)
-        return sh
+        raise ValueError("Neither GOOGLE_SPREADSHEET_ID nor GOOGLE_SPREADSHEET_NAME is configured.")
 
     def get_or_create_worksheet(self, district_name: str):
         if not self.spreadsheet:
@@ -240,6 +177,14 @@ class GoogleSheetsClient:
                 ws.append_row(HEADER_ROW_2, value_input_option="USER_ENTERED")
                 all_values = [HEADER_ROW_1, HEADER_ROW_2]
 
+            # Check if URL already exists in this worksheet to avoid duplicates
+            url = item.get("url", "").strip()
+            if url:
+                existing_urls = {row[1].strip() for row in all_values if len(row) > 1 and row[1]}
+                if url in existing_urls:
+                    logger.debug("Listing url=%s already exists in worksheet '%s'. Skipping duplicate append.", url, ws.title)
+                    return True
+
             # Calculate Nr based on current data rows (excluding 2 header rows)
             data_row_count = max(0, len(all_values) - 2)
             nr = data_row_count + 1
@@ -272,11 +217,43 @@ def get_sheets_client() -> GoogleSheetsClient:
     return _global_sheets_client
 
 
-def append_to_sheets_if_enabled(item: Dict[str, Any]):
+def append_to_sheets_if_enabled(item: Dict[str, Any]) -> bool:
     client = get_sheets_client()
     if client.is_configured():
         try:
-            client.append_listing(item)
+            success = client.append_listing(item)
+            if success and item.get("id"):
+                from db import mark_listing_sheets_synced
+                mark_listing_sheets_synced(item["id"])
+            return success
         except Exception as exc:
             logger.error("Error sending listing to Google Sheets: %s", exc)
+    return False
+
+
+def sync_db_listings_to_sheets(batch_size: int = 50) -> tuple[int, int]:
+    """Export unsynced listings from database to Google Sheets in small batches."""
+    from db import get_unsynced_listings, mark_listing_sheets_synced
+
+    client = get_sheets_client()
+    if not client.is_configured():
+        logger.warning("Cannot sync DB to Google Sheets: Client is not configured.")
+        return 0, 0
+
+    pending_items = get_unsynced_listings(limit=batch_size)
+    if not pending_items:
+        logger.info("No unsynced listings found in database.")
+        return 0, 0
+
+    logger.info("Syncing batch of %d unsynced listing(s) to Google Sheets...", len(pending_items))
+    synced_count = 0
+    for item in pending_items:
+        if client.append_listing(item):
+            if item.get("id"):
+                mark_listing_sheets_synced(item["id"])
+            synced_count += 1
+
+    logger.info("Sync batch complete. Appended %d/%d listings to Google Sheets.", synced_count, len(pending_items))
+    return synced_count, len(pending_items)
+
 
