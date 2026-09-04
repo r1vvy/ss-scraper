@@ -16,6 +16,7 @@ from config import (
     has_active_filters,
     load_districts,
     load_filters,
+    matches_filters,
 )
 from db import get_total_saved_count, init_db, is_id_seen, save_listing
 from scraper import fetch_page, get_total_pages, parse_listings_from_page, post_filter_page
@@ -74,9 +75,20 @@ def run_scraper(notify_chat_id=None):
         logger.info("District %s: total pages identified = %d", base_url, total_pages)
 
         for page_number in range(1, total_pages + 1):
-            page_url = base_url if page_number == 1 else f"{base_url}page{page_number}.html"
+            if active_filters:
+                filter_url = f"{base_url.rstrip('/')}/filter/"
+                page_url = filter_url if page_number == 1 else f"{filter_url}page{page_number}.html"
+            else:
+                page_url = base_url if page_number == 1 else f"{base_url}page{page_number}.html"
+
             try:
-                soup = first_page if page_number == 1 else fetch_page(session, page_url)
+                if page_number == 1:
+                    soup = first_page
+                elif active_filters:
+                    payload = build_filter_payload(district_name, filters=filters)
+                    soup = post_filter_page(session, page_url, payload)
+                else:
+                    soup = fetch_page(session, page_url)
             except requests.RequestException as err:
                 logger.error("Failed to fetch page %s: %s", page_url, err)
                 fetch_errors.append(f"{page_url}: {err}")
@@ -88,6 +100,10 @@ def run_scraper(notify_chat_id=None):
             for item in page_data:
                 item_id = item.get("id", "")
                 if item_id and is_id_seen(item_id):
+                    continue
+
+                if active_filters and not matches_filters(item, filters):
+                    logger.debug("Listing id=%s filtered out (price=%s, area=%s, rooms=%s)", item_id, item.get("price_monthly"), item.get("area_sqm"), item.get("rooms"))
                     continue
 
                 save_listing(item, notified=False)

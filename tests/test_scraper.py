@@ -95,3 +95,49 @@ def test_run_scraper_handles_network_errors(monkeypatch, tmp_path):
     count, errors = run_scraper()
     assert count == 0
     assert len(errors) > 0
+
+
+def test_run_scraper_applies_python_filters(monkeypatch):
+    from bs4 import BeautifulSoup
+    from main import run_scraper
+
+    saved_items = []
+
+    monkeypatch.setattr("main.init_db", lambda: None)
+    monkeypatch.setattr("main.get_total_saved_count", lambda: 0)
+    monkeypatch.setattr("main.load_districts", lambda: ["centre"])
+    monkeypatch.setattr("main.get_target_urls", lambda: ["https://www.ss.com/lv/real-estate/flats/riga/centre/hand_over/"])
+    monkeypatch.setattr("main.load_filters", lambda: {"price_max": "800", "area_min": "40"})
+    monkeypatch.setattr("main.is_id_seen", lambda item_id: False)
+    monkeypatch.setattr("main.save_listing", lambda item, notified=False: saved_items.append(item))
+    monkeypatch.setattr("telegram.flush_pending_notifications", lambda chat_id=None: 0)
+
+    html = """
+    <table>
+      <tr id="head_line"></tr>
+      <tr id="tr_101">
+        <td>1</td><td>2</td>
+        <td><a href="/lv/real-estate/flats/riga/centre/hand_over/101.html">Apt 1</a></td>
+        <td>Address 1</td><td>2</td><td>50</td><td>3</td><td>Series</td><td>100</td><td>500 €/mēn.</td>
+      </tr>
+      <tr id="tr_102">
+        <td>1</td><td>2</td>
+        <td><a href="/lv/real-estate/flats/riga/centre/hand_over/102.html">Apt 2</a></td>
+        <td>Address 2</td><td>2</td><td>50</td><td>3</td><td>Series</td><td>100</td><td>900 €/mēn.</td>
+      </tr>
+      <tr id="tr_103">
+        <td>1</td><td>2</td>
+        <td><a href="/lv/real-estate/flats/riga/centre/hand_over/103.html">Apt 3</a></td>
+        <td>Address 3</td><td>2</td><td>30</td><td>3</td><td>Series</td><td>100</td><td>400 €/mēn.</td>
+      </tr>
+    </table>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    monkeypatch.setattr("main.post_filter_page", lambda session, url, payload: soup)
+
+    total_new, errors = run_scraper()
+
+    assert total_new == 1
+    assert len(saved_items) == 1
+    assert saved_items[0]["id"] == "101"
+

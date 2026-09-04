@@ -12,38 +12,61 @@ def test_local_paths_use_project_root_abstraction():
 def test_normalize_districts_accepts_multiple_formats():
     assert normalize_districts("Centre,  mezciems, teika") == [
         "centre",
-        "mezciems",
+        "mezhciems",
         "teika",
     ]
     assert normalize_districts(["Centre", " centre ", "mezciems"]) == [
         "centre",
-        "mezciems",
+        "mezhciems",
     ]
     assert normalize_districts("centre mezaparks agenskalns jugla") == [
         "centre",
-        "mezaparks",
+        "mezhapark",
         "agenskalns",
-        "jugla",
+        "yugla",
     ]
     assert normalize_districts("centre-mezaparks-agenskalns-jugla") == [
         "centre",
-        "mezaparks",
+        "mezhapark",
         "agenskalns",
-        "jugla",
+        "yugla",
     ]
 
+
+def test_normalize_districts_latvian_and_aliases():
+    from config import normalize_district_name
+
+    assert normalize_district_name("Āgenskalns") == "agenskalns"
+    assert normalize_district_name("Pļavnieki") == "plyavnieki"
+    assert normalize_district_name("Čiekurkalns") == "chiekurkalns"
+    assert normalize_district_name("Mežciems") == "mezhciems"
+    assert normalize_district_name("Mežaparks") == "mezhapark"
+    assert normalize_district_name("Jugla") == "yugla"
+    assert normalize_district_name("Torņakalns") == "tornjakalns"
+    assert normalize_district_name("Vecrīga") == "vecriga"
+    assert normalize_district_name("Zolitūde") == "zolitude"
+    assert normalize_district_name("Iļģuciems") == "ilguciems"
+    assert normalize_district_name("Centrs") == "centre"
+    assert normalize_district_name("Center") == "centre"
+
+    assert normalize_districts("Āgenskalns, Pļavnieki, Purvciems, Centrs") == [
+        "agenskalns",
+        "plyavnieki",
+        "purvciems",
+        "centre",
+    ]
 
 
 def test_save_districts_persists_and_loads_from_file(tmp_path, monkeypatch):
     config_path = tmp_path / "districts.json"
     monkeypatch.setattr("config.CONFIG_PATH", config_path)
 
-    districts = save_districts(["centre", "mezciems", "old-town"])
+    districts = save_districts(["centre", "mezhciems", "vecriga"])
 
-    assert districts == ["centre", "mezciems", "old-town"]
+    assert districts == ["centre", "mezhciems", "vecriga"]
     saved = json.loads(config_path.read_text())
-    assert saved["districts"] == ["centre", "mezciems", "old-town"]
-    assert load_districts() == ["centre", "mezciems", "old-town"]
+    assert saved["districts"] == ["centre", "mezhciems", "vecriga"]
+    assert load_districts() == ["centre", "mezhciems", "vecriga"]
 
 
 def test_resolve_db_url_substitutes_and_encodes_password():

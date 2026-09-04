@@ -100,3 +100,70 @@ def test_post_filter_page_issues_post_request(monkeypatch):
     assert kwargs["headers"]["Content-Type"] == "application/x-www-form-urlencoded"
     assert soup.find("tr", id="head_line") is not None
 
+
+def test_extract_number():
+    from config import extract_number
+
+    assert extract_number("900  €/mēn.") == 900.0
+    assert extract_number("1,100  €/mēn.") == 1100.0
+    assert extract_number("1 200 €") == 1200.0
+    assert extract_number("45 m²") == 45.0
+    assert extract_number("45.5") == 45.5
+    assert extract_number("5/6") == 5.0
+    assert extract_number("2") == 2.0
+    assert extract_number(None) is None
+    assert extract_number("") is None
+    assert extract_number("-") is None
+
+
+def test_matches_filters():
+    from config import matches_filters
+
+    filters = {
+        "price_min": "300",
+        "price_max": "800",
+        "area_min": "40",
+        "area_max": "",
+        "rooms_min": "1",
+        "rooms_max": "3",
+        "floor_min": "",
+        "floor_max": "",
+    }
+
+    # Matches
+    item_good = {
+        "price_monthly": "500 €/mēn.",
+        "area_sqm": "50",
+        "rooms": "2",
+        "floor": "3/5",
+    }
+    assert matches_filters(item_good, filters) is True
+
+    # Price too high (900 €) -> Should FAIL
+    item_expensive = {
+        "price_monthly": "900 €/mēn.",
+        "area_sqm": "50",
+        "rooms": "2",
+        "floor": "3/5",
+    }
+    assert matches_filters(item_expensive, filters) is False
+
+    # Area too small (35 m²) -> Should FAIL
+    item_small = {
+        "price_monthly": "500 €/mēn.",
+        "area_sqm": "35",
+        "rooms": "2",
+        "floor": "3/5",
+    }
+    assert matches_filters(item_small, filters) is False
+
+    # Rooms too high (4 rooms) -> Should FAIL
+    item_many_rooms = {
+        "price_monthly": "500 €/mēn.",
+        "area_sqm": "50",
+        "rooms": "4",
+        "floor": "3/5",
+    }
+    assert matches_filters(item_many_rooms, filters) is False
+
+

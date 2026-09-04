@@ -62,15 +62,76 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 FINAL_DB_URL = resolve_db_url(DB_URL, DB_PASSWORD)
 
 
+LATVIAN_CHAR_MAP = str.maketrans(
+    {
+        "ā": "a",
+        "č": "c",
+        "ē": "e",
+        "ģ": "g",
+        "ī": "i",
+        "ķ": "k",
+        "ļ": "l",
+        "ņ": "n",
+        "š": "s",
+        "ū": "u",
+        "ž": "z",
+        "Ā": "a",
+        "Č": "c",
+        "Ē": "e",
+        "Ģ": "g",
+        "Ī": "i",
+        "Ķ": "k",
+        "Ļ": "l",
+        "Ņ": "n",
+        "Š": "s",
+        "Ū": "u",
+        "Ž": "z",
+    }
+)
+
+DISTRICT_ALIASES = {
+    "center": "centre",
+    "centrs": "centre",
+    "ciekurkalns": "chiekurkalns",
+    "čiekurkalns": "chiekurkalns",
+    "jugla": "yugla",
+    "mezaparks": "mezhapark",
+    "mežaparks": "mezhapark",
+    "mezhaparks": "mezhapark",
+    "mezciems": "mezhciems",
+    "mežciems": "mezhciems",
+    "tornakalns": "tornjakalns",
+    "torņakalns": "tornjakalns",
+    "plavnieki": "plyavnieki",
+    "pļavnieki": "plyavnieki",
+    "bolderaja": "bolderaya",
+    "bolderāja": "bolderaya",
+    "sampeteris": "shampeteris-pleskodale",
+    "shampeteris": "shampeteris-pleskodale",
+    "pleskodale": "shampeteris-pleskodale",
+    "dzeguzkalns": "dzeguzhkalns",
+    "dzegužkalns": "dzeguzhkalns",
+    "krasta": "krasta-st-area",
+    "krasta-iela": "krasta-st-area",
+    "maskavas": "maskavas-priekshpilseta",
+    "maskavas-forstate": "maskavas-priekshpilseta",
+    "skirotava": "shkirotava",
+    "šķirotava": "shkirotava",
+    "vecrigas": "vecriga",
+    "oldtown": "vecriga",
+    "old-town": "vecriga",
+}
+
+
 def normalize_district_name(value):
     if value is None:
         return ""
 
-    cleaned = str(value).strip().lower().replace("_", "-")
+    cleaned = str(value).strip().translate(LATVIAN_CHAR_MAP).lower().replace("_", "-")
     cleaned = re.sub(r"\s+", "-", cleaned)
     cleaned = re.sub(r"[^a-z0-9-]+", "-", cleaned)
     cleaned = re.sub(r"-+", "-", cleaned).strip("-")
-    return cleaned
+    return DISTRICT_ALIASES.get(cleaned, cleaned)
 
 
 def normalize_districts(raw_districts):
@@ -84,7 +145,7 @@ def normalize_districts(raw_districts):
 
     values = []
     for item in parts:
-        cleaned_item = str(item).strip().lower()
+        cleaned_item = str(item).strip().translate(LATVIAN_CHAR_MAP).lower()
         if "-" in cleaned_item:
             sub_parts = [p for p in cleaned_item.split("-") if p]
             if len(sub_parts) >= 3 and all(p.isalpha() for p in sub_parts):
@@ -102,6 +163,7 @@ def normalize_districts(raw_districts):
         seen.add(district)
 
     return normalized
+
 
 
 
@@ -213,7 +275,77 @@ def save_filters(filter_updates):
 
 def has_active_filters(filters=None):
     f = filters or load_filters()
-    return any(bool(v) for v in f.values())
+    return any(bool(str(v).strip()) for v in f.values())
+
+
+def extract_number(val):
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s:
+        return None
+    cleaned = re.sub(r"(\d+)[,\s](\d{3})", r"\1\2", s)
+    cleaned = cleaned.replace(",", ".")
+    match = re.search(r"[-+]?\d*\.?\d+", cleaned)
+    if match:
+        try:
+            return float(match.group(0))
+        except ValueError:
+            return None
+    return None
+
+
+def matches_filters(item, filters=None):
+    f = filters if filters is not None else load_filters()
+    if not f or not any(bool(str(v).strip()) for v in f.values()):
+        return True
+
+    # Price check
+    price_val = extract_number(item.get("price_monthly"))
+    price_min = extract_number(f.get("price_min"))
+    price_max = extract_number(f.get("price_max"))
+    if price_min is not None:
+        if price_val is None or price_val < price_min:
+            return False
+    if price_max is not None:
+        if price_val is None or price_val > price_max:
+            return False
+
+    # Area check
+    area_val = extract_number(item.get("area_sqm"))
+    area_min = extract_number(f.get("area_min"))
+    area_max = extract_number(f.get("area_max"))
+    if area_min is not None:
+        if area_val is None or area_val < area_min:
+            return False
+    if area_max is not None:
+        if area_val is None or area_val > area_max:
+            return False
+
+    # Rooms check
+    rooms_val = extract_number(item.get("rooms"))
+    rooms_min = extract_number(f.get("rooms_min"))
+    rooms_max = extract_number(f.get("rooms_max"))
+    if rooms_min is not None:
+        if rooms_val is None or rooms_val < rooms_min:
+            return False
+    if rooms_max is not None:
+        if rooms_val is None or rooms_val > rooms_max:
+            return False
+
+    # Floor check
+    floor_val = extract_number(item.get("floor"))
+    floor_min = extract_number(f.get("floor_min"))
+    floor_max = extract_number(f.get("floor_max"))
+    if floor_min is not None:
+        if floor_val is None or floor_val < floor_min:
+            return False
+    if floor_max is not None:
+        if floor_val is None or floor_val > floor_max:
+            return False
+
+    return True
+
 
 
 def build_filter_payload(district, filters=None):
