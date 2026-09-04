@@ -48,12 +48,14 @@ class GoogleSheetsClient:
         folder_name: Optional[str] = None,
         folder_id: Optional[str] = None,
         spreadsheet_name: Optional[str] = None,
+        spreadsheet_id: Optional[str] = None,
     ):
         from config import (
             GOOGLE_CREDENTIALS_FILE,
             GOOGLE_SHEETS_CREDENTIALS,
             GOOGLE_SHEETS_FOLDER_ID,
             GOOGLE_SHEETS_FOLDER_NAME,
+            GOOGLE_SPREADSHEET_ID,
             GOOGLE_SPREADSHEET_NAME,
         )
 
@@ -62,6 +64,7 @@ class GoogleSheetsClient:
         self.folder_name = folder_name or GOOGLE_SHEETS_FOLDER_NAME
         self.folder_id = folder_id or GOOGLE_SHEETS_FOLDER_ID
         self.spreadsheet_name = spreadsheet_name or GOOGLE_SPREADSHEET_NAME or "SS.com Real Estate Listings"
+        self.spreadsheet_id = spreadsheet_id or GOOGLE_SPREADSHEET_ID
 
         self.client = None
         self.spreadsheet = None
