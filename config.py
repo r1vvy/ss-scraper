@@ -191,31 +191,26 @@ DEFAULT_FILTERS = {
 def load_config():
     payload = {}
 
-    # Check environment variable override
-    env_districts = (os.getenv("DISTRICTS") or os.getenv("SS_DISTRICTS") or "").strip()
-    if env_districts:
-        payload["districts"] = env_districts
-
+    # Primary source: PostgreSQL database
     try:
         from db import db_load_app_config
 
-        if "districts" not in payload:
-            db_districts = db_load_app_config("districts")
-            if db_districts is not None:
-                try:
-                    payload["districts"] = json.loads(db_districts)
-                except Exception:
-                    pass
-
+        db_districts = db_load_app_config("districts")
         db_filters = db_load_app_config("filters")
+        if db_districts is not None:
+            try:
+                payload["districts"] = json.loads(db_districts)
+            except Exception:
+                pass
         if db_filters is not None:
             try:
                 payload["filters"] = json.loads(db_filters)
             except Exception:
                 pass
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Database load unavailable: %s", exc)
 
+    # Fallback to local file if not present in DB (e.g. offline dev/testing)
     if CONFIG_PATH.exists():
         try:
             with CONFIG_PATH.open("r", encoding="utf-8") as file:
