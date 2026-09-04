@@ -28,6 +28,13 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID_HERE").strip()
 MAX_NOTIFICATIONS_PER_BATCH = int(os.getenv("MAX_NOTIFICATIONS_PER_BATCH", "10"))
 FLUSH_INTERVAL_SECONDS = int(os.getenv("FLUSH_INTERVAL_SECONDS", "30"))
 
+GOOGLE_SHEETS_CREDENTIALS = os.getenv("GOOGLE_SHEETS_CREDENTIALS", "").strip()
+GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "").strip()
+GOOGLE_SHEETS_FOLDER_NAME = os.getenv("GOOGLE_SHEETS_FOLDER_NAME", "").strip()
+GOOGLE_SHEETS_FOLDER_ID = os.getenv("GOOGLE_SHEETS_FOLDER_ID", "").strip()
+GOOGLE_SPREADSHEET_NAME = os.getenv("GOOGLE_SPREADSHEET_NAME", "SS.com Real Estate Listings").strip()
+
+
 
 def resolve_db_url(raw_url=None, password=None):
     url = (raw_url if raw_url is not None else os.getenv("DB_URL") or "").strip()

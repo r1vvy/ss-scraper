@@ -20,6 +20,7 @@ from config import (
 )
 from db import get_total_saved_count, init_db, is_id_seen, save_listing
 from scraper import fetch_page, get_total_pages, parse_listings_from_page, post_filter_page
+from sheets import append_to_sheets_if_enabled
 from telegram import format_telegram_card, run_telegram_listener, send_telegram_message
 
 logging.basicConfig(
@@ -107,6 +108,7 @@ def run_scraper(notify_chat_id=None):
                     continue
 
                 save_listing(item, notified=False)
+                append_to_sheets_if_enabled(item)
                 total_new_listings += 1
 
             if page_number < total_pages:

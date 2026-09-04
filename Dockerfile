@@ -11,6 +11,7 @@ COPY pyproject.toml /app/
 
 RUN python -m pip install --upgrade pip
 RUN pip install SQLAlchemy psycopg2-binary requests beautifulsoup4 flask gunicorn tenacity
+RUN pip install SQLAlchemy psycopg2-binary requests beautifulsoup4 flask gunicorn tenacity gspread google-auth google-api-python-client
 
 COPY . /app
 
