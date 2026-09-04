@@ -84,7 +84,6 @@ def parse_listings_from_page(soup):
         listing_id = _extract_listing_id(relative_href, row.get("id", ""))
         category, subcategory, city, district = _extract_geo_parts(relative_href)
 
-        description = _normalize_whitespace(cells[2].get_text(" ", strip=True))
         address = _normalize_whitespace(cells[3].get_text(" ", strip=True))
         rooms = _normalize_whitespace(cells[4].get_text(" ", strip=True))
         area = _normalize_whitespace(cells[5].get_text(" ", strip=True))
@@ -107,10 +106,11 @@ def parse_listings_from_page(soup):
                 "series": series,
                 "price_per_sqm": price_sqm,
                 "price_monthly": price_month,
-                "description": description,
+                "description": "",
                 "url": full_url,
             }
         )
+
 
     return listings
 

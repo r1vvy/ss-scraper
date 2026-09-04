@@ -5,8 +5,9 @@ from functools import lru_cache
 import logging
 from flask import Flask, request, abort
 
-from telegram import process_telegram_command, send_telegram_message
+from telegram import flush_pending_notifications, process_telegram_command, send_telegram_message
 from main import run_scraper, trigger_scrape
+
 
 # Configure console logging
 logging.basicConfig(
@@ -92,8 +93,8 @@ def telegram_webhook():
     logger.info("processed webhook: processed=%s", bool(processed))
     return ("", 204) if processed else ("", 200)
 
-
 @app.route("/run-scrape", methods=["POST", "GET"])
+
 def run_scrape():
     # Optional lightweight auth via secret param
     webhook_secret = get_secret("TELEGRAM_WEBHOOK_SECRET")
@@ -102,17 +103,35 @@ def run_scrape():
         if secret != webhook_secret:
             abort(403)
 
-    logger.info("run-scrape requested by %s", request.remote_addr)
-    success, msg = trigger_scrape()
+    chat_id = request.args.get("chat_id")
+    logger.info("run-scrape requested by %s (chat_id=%s)", request.remote_addr, chat_id)
+    success, msg = trigger_scrape(chat_id=chat_id)
     status_code = 200 if success else 409
     logger.info("run-scrape finished: %s", msg)
     return (msg, status_code)
+
+
+@app.route("/flush-notifications", methods=["POST", "GET"])
+def flush_notifications():
+    webhook_secret = get_secret("TELEGRAM_WEBHOOK_SECRET")
+    if webhook_secret:
+        secret = request.args.get("secret") or request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+        if secret != webhook_secret:
+            abort(403)
+
+    chat_id = request.args.get("chat_id")
+    logger.info("flush-notifications requested by %s (chat_id=%s)", request.remote_addr, chat_id)
+    flushed = flush_pending_notifications(chat_id=chat_id)
+    msg = f"Flushed {flushed} pending notification(s)."
+    logger.info("flush-notifications finished: %s", msg)
+    return (msg, 200)
 
 
 @app.route("/health", methods=["GET"])
 def health():
     logger.debug("health check")
     return ("OK", 200)
+
 
 
 if __name__ == "__main__":

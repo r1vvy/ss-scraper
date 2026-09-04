@@ -60,3 +60,23 @@ def test_save_listing_and_duplicate_detection():
     # Save duplicate listing, should DO NOTHING (no conflict)
     db.save_listing(item)
     assert db.get_total_saved_count() == 1
+
+
+def test_notified_status_and_helpers():
+    db.init_db()
+
+    item1 = {"id": "listing-1", "description": "Item 1"}
+    item2 = {"id": "listing-2", "description": "Item 2"}
+
+    db.save_listing(item1, notified=False)
+    db.save_listing(item2, notified=True)
+
+    assert db.get_unnotified_count() == 1
+    unnotified = db.get_unnotified_listings(limit=10)
+    assert len(unnotified) == 1
+    assert unnotified[0]["id"] == "listing-1"
+
+    db.mark_listing_notified("listing-1")
+    assert db.get_unnotified_count() == 0
+    assert len(db.get_unnotified_listings(limit=10)) == 0
+

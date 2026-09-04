@@ -23,31 +23,47 @@ logger = logging.getLogger("ss_scraper.telegram")
 
 def format_telegram_card(item):
     """Formats a listing dict into an HTML Telegram card."""
-    city = html.escape(str(item.get("city", "")).title())
-    district = html.escape(str(item.get("district", "")).title())
-    address = html.escape(str(item.get("address", "")))
-    price_monthly = html.escape(str(item.get("price_monthly", "")))
-    price_per_sqm = html.escape(str(item.get("price_per_sqm", "")))
-    rooms = html.escape(str(item.get("rooms", "")))
-    area_sqm = html.escape(str(item.get("area_sqm", "")))
-    floor = html.escape(str(item.get("floor", "")))
-    series = html.escape(str(item.get("series", "")))
-    description = html.escape(str(item.get("description", "")))
-    url = html.escape(str(item.get("url", "")), quote=True)
-
-    preview = description[:150]
-    if len(description) > 150:
-        preview = f"{preview}..."
+    city = html.escape(str(item.get("city", "") or "").title())
+    district = html.escape(str(item.get("district", "") or "").title())
+    address = html.escape(str(item.get("address", "") or ""))
+    price_monthly = html.escape(str(item.get("price_monthly", "") or ""))
+    price_per_sqm = html.escape(str(item.get("price_per_sqm", "") or ""))
+    rooms = html.escape(str(item.get("rooms", "") or ""))
+    area_sqm = html.escape(str(item.get("area_sqm", "") or ""))
+    floor = html.escape(str(item.get("floor", "") or ""))
+    series = html.escape(str(item.get("series", "") or ""))
+    url = html.escape(str(item.get("url", "") or ""), quote=True)
 
     return (
         f"<b>🏢 New Listing ({city} - {district})</b>\n\n"
         f"<b>📍 Address:</b> {address}\n"
         f"<b>💰 Price:</b> {price_monthly} ({price_per_sqm})\n"
         f"<b>📐 Details:</b> {rooms} room(s) | {area_sqm} m² | Floor {floor}\n"
-        f"<b>🏗️ Series:</b> {series}\n"
-        f"<b>📝 Desc:</b> {preview}\n\n"
-        f"🔗 <a href='{url}'>View on SS.com</a>"
+        f"<b>🏗️ Series:</b> {series}\n\n"
+        f"🔗 <a href=\"{url}\">View on SS.com</a>"
     )
+
+
+
+def flush_pending_notifications(chat_id=None, limit=None):
+    from config import MAX_NOTIFICATIONS_PER_BATCH
+    from db import get_unnotified_listings, mark_listing_notified
+
+    batch_limit = limit if limit is not None else MAX_NOTIFICATIONS_PER_BATCH
+    pending_items = get_unnotified_listings(limit=batch_limit)
+    if not pending_items:
+        return 0
+
+    sent_count = 0
+    for item in pending_items:
+        message = format_telegram_card(item)
+        success = send_telegram_message(message, chat_id=chat_id)
+        if success:
+            mark_listing_notified(item["id"])
+            sent_count += 1
+        else:
+            logger.warning("Failed to send Telegram notification for item id=%s", item.get("id"))
+    return sent_count
 
 
 def format_filter_summary(filters):
@@ -129,8 +145,9 @@ def handle_district_command(command_text, chat_id=None):
     if cmd in {"/scrape", "/run", "/run_scrape"}:
         from main import trigger_scrape
 
-        _, msg = trigger_scrape(chat_id=chat_id)
+        _, msg = trigger_scrape(chat_id=chat_id, async_run=True)
         return msg
+
 
     if cmd in {"/help", "/start"}:
         return (

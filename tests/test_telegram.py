@@ -44,7 +44,7 @@ def test_handle_district_command_scrape_trigger(monkeypatch):
 
     result = handle_district_command("/scrape", chat_id="12345")
     assert result == "🚀 Scrape started"
-    mock_trigger.assert_called_once_with(chat_id="12345")
+    mock_trigger.assert_called_once_with(chat_id="12345", async_run=True)
 
 
 def test_handle_district_command_with_bot_username(monkeypatch):
@@ -53,7 +53,7 @@ def test_handle_district_command_with_bot_username(monkeypatch):
 
     result = handle_district_command("/scrape@my_bot", chat_id="12345")
     assert result == "🚀 Scrape started"
-    mock_trigger.assert_called_once_with(chat_id="12345")
+    mock_trigger.assert_called_once_with(chat_id="12345", async_run=True)
 
 
 def test_handle_telegram_update_processes_slash_command(monkeypatch):
@@ -68,6 +68,53 @@ def test_handle_telegram_update_processes_slash_command(monkeypatch):
     }
     response = handle_telegram_update(update)
     assert response == {"chat_id": 999, "text": "🚀 Scrape started"}
+
+
+def test_format_telegram_card_escapes_entities_properly():
+    from telegram import format_telegram_card
+
+    item = {
+        "id": "123",
+        "city": "riga",
+        "district": "centre",
+        "address": "Brīvības & Stabu <10>",
+        "rooms": "2",
+        "area_sqm": "50",
+        "floor": "3/5",
+        "series": "spec",
+        "price_per_sqm": "10 €",
+        "price_monthly": "500 €",
+        "url": "https://www.ss.com/test?a=1&b=2",
+    }
+    card = format_telegram_card(item)
+    assert "Brīvības &amp; Stabu &lt;10&gt;" in card
+    assert "https://www.ss.com/test?a=1&amp;b=2" in card
+    assert "<b>📝 Desc:</b>" not in card
+
+
+
+
+
+def test_flush_pending_notifications(monkeypatch):
+    from telegram import flush_pending_notifications
+
+    item = {
+        "id": "list-1",
+        "city": "riga",
+        "district": "centre",
+        "address": "Street 1",
+        "description": "desc",
+        "url": "http://ss.com",
+    }
+    monkeypatch.setattr("db.get_unnotified_listings", lambda limit=10: [item])
+    mock_mark = MagicMock()
+    monkeypatch.setattr("db.mark_listing_notified", mock_mark)
+    monkeypatch.setattr("telegram.send_telegram_message", lambda msg, chat_id=None: True)
+
+    sent = flush_pending_notifications(chat_id="999", limit=5)
+    assert sent == 1
+    mock_mark.assert_called_once_with("list-1")
+
 
 
 def test_trigger_scrape_prevents_concurrent_runs(monkeypatch):

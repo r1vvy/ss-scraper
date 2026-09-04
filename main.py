@@ -90,11 +90,8 @@ def run_scraper(notify_chat_id=None):
                 if item_id and is_id_seen(item_id):
                     continue
 
-                save_listing(item)
+                save_listing(item, notified=False)
                 total_new_listings += 1
-
-                message = format_telegram_card(item)
-                send_telegram_message(message, chat_id=notify_chat_id)
 
             if page_number < total_pages:
                 time.sleep(random.uniform(*REQUEST_DELAY_RANGE))
@@ -104,6 +101,13 @@ def run_scraper(notify_chat_id=None):
         total_new_listings,
         len(fetch_errors),
     )
+
+    # Flush initial batch of notifications
+    if total_new_listings > 0:
+        from telegram import flush_pending_notifications
+        flushed_count = flush_pending_notifications(chat_id=notify_chat_id)
+        logger.info("Initial notification batch flushed: %d card(s) sent", flushed_count)
+
     return total_new_listings, fetch_errors
 
 
@@ -130,7 +134,10 @@ def trigger_scrape(chat_id=None, async_run=False):
             if total_new == 0:
                 msg = f"✅ Scraping complete for <b>{html.escape(districts_str)}</b>. No new listings found.{err_summary}"
             else:
-                msg = f"✅ Scraping complete for <b>{html.escape(districts_str)}</b>. Found <b>{total_new}</b> new listing(s).{err_summary}"
+                from db import get_unnotified_count
+                remaining = get_unnotified_count()
+                pending_info = f" ({remaining} pending delivery)" if remaining > 0 else ""
+                msg = f"✅ Scraping complete for <b>{html.escape(districts_str)}</b>. Found <b>{total_new}</b> new listing(s){pending_info}.{err_summary}"
             return True, msg
         except Exception as exc:
             logger.exception("Error during scrape: %s", exc)
@@ -151,17 +158,45 @@ def trigger_scrape(chat_id=None, async_run=False):
     return _execute()
 
 
-def start_background_services():
-    if not TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
-        return
+def start_notification_flusher():
+    from config import FLUSH_INTERVAL_SECONDS
+    from db import get_unnotified_count
+    from telegram import flush_pending_notifications
 
-    listener_thread = threading.Thread(
-        target=run_telegram_listener,
-        name="telegram-listener",
+    def _flusher_loop():
+        logger.info("Starting background notification flusher loop.")
+        while True:
+            try:
+                unnotified = get_unnotified_count()
+                if unnotified > 0:
+                    logger.info("Pending unnotified listings in queue: %d. Flushing batch...", unnotified)
+                    sent = flush_pending_notifications()
+                    logger.info("Flushed %d notification card(s). Remaining unnotified: %d", sent, get_unnotified_count())
+            except Exception as exc:
+                logger.exception("Error in background notification flusher: %s", exc)
+
+            time.sleep(FLUSH_INTERVAL_SECONDS)
+
+    flusher_thread = threading.Thread(
+        target=_flusher_loop,
+        name="notification-flusher",
         daemon=True,
     )
-    listener_thread.start()
-    logger.info("Telegram listener started in background.")
+    flusher_thread.start()
+    logger.info("Notification flusher thread started.")
+
+
+def start_background_services():
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_TOKEN != "YOUR_BOT_TOKEN_HERE":
+        listener_thread = threading.Thread(
+            target=run_telegram_listener,
+            name="telegram-listener",
+            daemon=True,
+        )
+        listener_thread.start()
+        logger.info("Telegram listener started in background.")
+
+    start_notification_flusher()
 
 
 if __name__ == "__main__":

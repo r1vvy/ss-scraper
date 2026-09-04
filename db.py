@@ -32,7 +32,8 @@ def init_db():
         price_per_sqm TEXT,
         price_monthly TEXT,
         description TEXT,
-        url TEXT
+        url TEXT,
+        notified BOOLEAN DEFAULT FALSE
     )
     """
 
@@ -42,10 +43,15 @@ def init_db():
         engine = get_engine()
         with engine.begin() as conn:
             conn.execute(text(schema))
+            try:
+                conn.execute(text("ALTER TABLE public.listings ADD COLUMN notified BOOLEAN DEFAULT FALSE"))
+            except Exception:
+                pass
         logger.info("Database schema ready (public.listings)")
     except Exception:
         logger.exception("Database init failed: schema creation or initialization error")
         raise
+
 
 
 def is_id_seen(listing_id):
@@ -65,20 +71,20 @@ def is_id_seen(listing_id):
         raise
 
 
-def save_listing(item):
+def save_listing(item, notified=False):
     listing_id = item.get("id", "")
-    logger.debug("Saving listing id=%s district=%s", listing_id, item.get("district", ""))
+    logger.debug("Saving listing id=%s district=%s notified=%s", listing_id, item.get("district", ""), notified)
 
     stmt = text(
         """
         INSERT INTO public.listings (
             id, category, subcategory, city, district, address, rooms,
             area_sqm, floor, series, price_per_sqm, price_monthly,
-            description, url
+            description, url, notified
         ) VALUES (
             :id, :category, :subcategory, :city, :district, :address, :rooms,
             :area_sqm, :floor, :series, :price_per_sqm, :price_monthly,
-            :description, :url
+            :description, :url, :notified
         ) ON CONFLICT (id) DO NOTHING
         """
     )
@@ -98,16 +104,71 @@ def save_listing(item):
         "price_monthly": item.get("price_monthly", ""),
         "description": item.get("description", ""),
         "url": item.get("url", ""),
+        "notified": bool(notified),
     }
 
     try:
         engine = get_engine()
         with engine.begin() as conn:
             conn.execute(stmt, params)
-        logger.info("Saved listing id=%s to public.listings", listing_id)
+        logger.info("Saved listing id=%s to public.listings (notified=%s)", listing_id, notified)
     except Exception:
         logger.exception("Database save failed for listing id=%s", listing_id)
         raise
+
+
+def mark_listing_notified(listing_id):
+    if not listing_id:
+        return
+    try:
+        engine = get_engine()
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE public.listings SET notified = TRUE WHERE id = :id"), {"id": listing_id})
+        logger.debug("Marked listing id=%s as notified", listing_id)
+    except Exception:
+        logger.exception("Database update failed for marking listing id=%s as notified", listing_id)
+        raise
+
+
+def get_unnotified_listings(limit=10):
+    try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            result = conn.execute(
+                text(
+                    """
+                    SELECT id, category, subcategory, city, district, address,
+                           rooms, area_sqm, floor, series, price_per_sqm,
+                           price_monthly, description, url, notified
+                    FROM public.listings
+                    WHERE notified = FALSE OR notified IS NULL
+                    ORDER BY id DESC
+                    LIMIT :limit
+                    """
+                ),
+                {"limit": limit},
+            )
+            rows = result.mappings().all()
+            return [dict(r) for r in rows]
+    except Exception:
+        logger.exception("Failed to query unnotified listings from database")
+        return []
+
+
+def get_unnotified_count():
+    try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT COUNT(*) FROM public.listings WHERE notified = FALSE OR notified IS NULL"))
+            try:
+                count = int(result.scalar())
+            except Exception:
+                row = result.fetchone()
+                count = int(row[0]) if row else 0
+        return count
+    except Exception:
+        logger.exception("Failed to query unnotified listing count")
+        return 0
 
 
 def get_total_saved_count():
@@ -125,3 +186,4 @@ def get_total_saved_count():
     except Exception:
         logger.exception("Database count query failed")
         raise
+
