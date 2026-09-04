@@ -190,16 +190,24 @@ DEFAULT_FILTERS = {
 
 def load_config():
     payload = {}
+
+    # Check environment variable override
+    env_districts = (os.getenv("DISTRICTS") or os.getenv("SS_DISTRICTS") or "").strip()
+    if env_districts:
+        payload["districts"] = env_districts
+
     try:
         from db import db_load_app_config
 
-        db_districts = db_load_app_config("districts")
+        if "districts" not in payload:
+            db_districts = db_load_app_config("districts")
+            if db_districts is not None:
+                try:
+                    payload["districts"] = json.loads(db_districts)
+                except Exception:
+                    pass
+
         db_filters = db_load_app_config("filters")
-        if db_districts is not None:
-            try:
-                payload["districts"] = json.loads(db_districts)
-            except Exception:
-                pass
         if db_filters is not None:
             try:
                 payload["filters"] = json.loads(db_filters)
@@ -208,14 +216,17 @@ def load_config():
     except Exception:
         pass
 
-    if not payload and CONFIG_PATH.exists():
+    if CONFIG_PATH.exists():
         try:
             with CONFIG_PATH.open("r", encoding="utf-8") as file:
                 file_payload = json.load(file)
                 if isinstance(file_payload, dict):
-                    payload = file_payload
+                    if "districts" not in payload and "districts" in file_payload:
+                        payload["districts"] = file_payload["districts"]
+                    if "filters" not in payload and "filters" in file_payload:
+                        payload["filters"] = file_payload["filters"]
         except (json.JSONDecodeError, OSError):
-            payload = {}
+            pass
 
     districts = normalize_districts(payload.get("districts", DEFAULT_DISTRICTS)) or list(DEFAULT_DISTRICTS)
     raw_filters = payload.get("filters", {})
