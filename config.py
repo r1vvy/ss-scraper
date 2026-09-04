@@ -78,9 +78,19 @@ def normalize_districts(raw_districts):
         return []
 
     if isinstance(raw_districts, str):
-        values = [part.strip() for part in raw_districts.split(",")]
+        parts = [p.strip() for p in re.split(r"[,;\s]+", raw_districts) if p.strip()]
     else:
-        values = list(raw_districts)
+        parts = list(raw_districts)
+
+    values = []
+    for item in parts:
+        cleaned_item = str(item).strip().lower()
+        if "-" in cleaned_item:
+            sub_parts = [p for p in cleaned_item.split("-") if p]
+            if len(sub_parts) >= 3 and all(p.isalpha() for p in sub_parts):
+                values.extend(sub_parts)
+                continue
+        values.append(item)
 
     normalized = []
     seen = set()
@@ -92,6 +102,8 @@ def normalize_districts(raw_districts):
         seen.add(district)
 
     return normalized
+
+
 
 
 DEFAULT_FILTERS = {

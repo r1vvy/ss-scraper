@@ -10,15 +10,28 @@ def test_local_paths_use_project_root_abstraction():
 
 
 def test_normalize_districts_accepts_multiple_formats():
-    assert normalize_districts("Centre,  mezciems, old-town") == [
+    assert normalize_districts("Centre,  mezciems, teika") == [
         "centre",
         "mezciems",
-        "old-town",
+        "teika",
     ]
     assert normalize_districts(["Centre", " centre ", "mezciems"]) == [
         "centre",
         "mezciems",
     ]
+    assert normalize_districts("centre mezaparks agenskalns jugla") == [
+        "centre",
+        "mezaparks",
+        "agenskalns",
+        "jugla",
+    ]
+    assert normalize_districts("centre-mezaparks-agenskalns-jugla") == [
+        "centre",
+        "mezaparks",
+        "agenskalns",
+        "jugla",
+    ]
+
 
 
 def test_save_districts_persists_and_loads_from_file(tmp_path, monkeypatch):
