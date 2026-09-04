@@ -26,6 +26,7 @@ steps:
       - '--allow-unauthenticated'
       - '--service-account=ss-scraper-run-sa@$PROJECT_ID.iam.gserviceaccount.com'
       - '--set-secrets=TELEGRAM_WEBHOOK_SECRET=projects/$PROJECT_NUMBER/secrets/TELEGRAM_WEBHOOK_SECRET:latest,DB_URL=projects/$PROJECT_NUMBER/secrets/DB_URL:latest,TELEGRAM_BOT_TOKEN=projects/$PROJECT_NUMBER/secrets/TELEGRAM_BOT_TOKEN:latest,TELEGRAM_CHAT_ID=projects/$PROJECT_NUMBER/secrets/TELEGRAM_CHAT_ID:latest,GOOGLE_SHEETS_CREDENTIALS=projects/$PROJECT_NUMBER/secrets/GOOGLE_SHEETS_CREDENTIALS:latest'
+      - '--set-env-vars=GOOGLE_SPREADSHEET_ID=1UtS4_4iti8S3VSN0syG7fgcfXCG21I-e-jBP-h2stiU'
 
 images:
   - 'gcr.io/$PROJECT_ID/ss-scraper:$SHORT_SHA'
