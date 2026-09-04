@@ -52,10 +52,9 @@ def test_parse_listings_from_page_extracts_fields():
         "series": "1940",
         "price_per_sqm": "120",
         "price_monthly": "900",
-        "description": "",
-
         "url": "https://www.ss.com/lv/real-estate/flats/riga/centre/hand_over/123.html",
     }]
+
 
 
 def test_format_telegram_card_includes_summary_and_link():

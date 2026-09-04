@@ -1,5 +1,6 @@
 import logging
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
+
 from config import FINAL_DB_URL
 
 logger = logging.getLogger("ss_scraper.db")
@@ -18,7 +19,7 @@ def get_engine():
 
 def init_db():
     schema_listings = """
-    CREATE TABLE IF NOT EXISTS public.listings (
+    CREATE TABLE public.listings (
         id TEXT PRIMARY KEY,
         category TEXT,
         subcategory TEXT,
@@ -31,34 +32,66 @@ def init_db():
         series TEXT,
         price_per_sqm TEXT,
         price_monthly TEXT,
-        description TEXT,
         url TEXT,
         notified BOOLEAN DEFAULT FALSE
     )
     """
 
     schema_config = """
-    CREATE TABLE IF NOT EXISTS public.app_config (
+    CREATE TABLE public.app_config (
         key TEXT PRIMARY KEY,
         value TEXT
     )
     """
 
-    logger.info("Initializing PostgreSQL DB schema (public.listings & public.app_config)")
+    logger.info("Checking database schema (public.listings & public.app_config)...")
 
     try:
         engine = get_engine()
+        inspector = inspect(engine)
+
+        try:
+            existing_tables = set(inspector.get_table_names(schema="public"))
+        except Exception:
+            existing_tables = set()
+
+        if not existing_tables:
+            existing_tables = set(inspector.get_table_names())
+
         with engine.begin() as conn:
-            conn.execute(text(schema_listings))
-            conn.execute(text(schema_config))
+            if "listings" not in existing_tables:
+                logger.info("Table 'listings' not found. Creating table public.listings...")
+                conn.execute(text(schema_listings))
+            else:
+                logger.info("Table 'listings' already exists. Skipping creation.")
+
+            if "app_config" not in existing_tables:
+                logger.info("Table 'app_config' not found. Creating table public.app_config...")
+                conn.execute(text(schema_config))
+            else:
+                logger.info("Table 'app_config' already exists. Skipping creation.")
+
+        if "listings" in existing_tables:
             try:
-                conn.execute(text("ALTER TABLE public.listings ADD COLUMN notified BOOLEAN DEFAULT FALSE"))
+                cols = [c["name"] for c in inspector.get_columns("listings", schema="public")]
             except Exception:
-                pass
-        logger.info("Database schema ready (public.listings & public.app_config)")
+                try:
+                    cols = [c["name"] for c in inspector.get_columns("listings")]
+                except Exception:
+                    cols = []
+
+            if cols and "notified" not in cols:
+                logger.info("Column 'notified' missing from listings table. Adding...")
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE public.listings ADD COLUMN notified BOOLEAN DEFAULT FALSE"))
+
+        logger.info("Database schema check complete. Ready.")
     except Exception:
         logger.exception("Database init failed: schema creation or initialization error")
         raise
+
+
+
 
 
 
@@ -120,11 +153,11 @@ def save_listing(item, notified=False):
         INSERT INTO public.listings (
             id, category, subcategory, city, district, address, rooms,
             area_sqm, floor, series, price_per_sqm, price_monthly,
-            description, url, notified
+            url, notified
         ) VALUES (
             :id, :category, :subcategory, :city, :district, :address, :rooms,
             :area_sqm, :floor, :series, :price_per_sqm, :price_monthly,
-            :description, :url, :notified
+            :url, :notified
         ) ON CONFLICT (id) DO NOTHING
         """
     )
@@ -142,7 +175,6 @@ def save_listing(item, notified=False):
         "series": item.get("series", ""),
         "price_per_sqm": item.get("price_per_sqm", ""),
         "price_monthly": item.get("price_monthly", ""),
-        "description": item.get("description", ""),
         "url": item.get("url", ""),
         "notified": bool(notified),
     }
@@ -179,7 +211,7 @@ def get_unnotified_listings(limit=10):
                     """
                     SELECT id, category, subcategory, city, district, address,
                            rooms, area_sqm, floor, series, price_per_sqm,
-                           price_monthly, description, url, notified
+                           price_monthly, url, notified
                     FROM public.listings
                     WHERE notified = FALSE OR notified IS NULL
                     ORDER BY id DESC
@@ -193,6 +225,7 @@ def get_unnotified_listings(limit=10):
     except Exception:
         logger.exception("Failed to query unnotified listings from database")
         return []
+
 
 
 def get_unnotified_count():

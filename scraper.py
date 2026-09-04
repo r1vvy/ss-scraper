@@ -106,10 +106,10 @@ def parse_listings_from_page(soup):
                 "series": series,
                 "price_per_sqm": price_sqm,
                 "price_monthly": price_month,
-                "description": "",
                 "url": full_url,
             }
         )
+
 
 
     return listings
