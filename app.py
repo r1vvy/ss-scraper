@@ -20,7 +20,16 @@ logger = logging.getLogger("ss_scraper.app")
 app = Flask(__name__)
 
 try:
+    from db import init_db
+    init_db()
+except Exception as exc:
+    logger.critical("Fatal error: Database initialization failed on app startup: %s", exc)
+    sys.exit(1)
+
+
+try:
     from google.cloud import secretmanager
+
 except Exception:
     secretmanager = None
 

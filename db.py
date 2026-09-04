@@ -62,6 +62,9 @@ def init_db():
 
 
 
+
+
+
 def db_load_app_config(key):
     try:
         engine = get_engine()
@@ -89,8 +92,6 @@ def db_save_app_config(key, value):
         logger.info("Saved app_config key=%s to database", key)
     except Exception:
         logger.exception("Failed to save app_config key=%s to database", key)
-
-
 
 
 def is_id_seen(listing_id):
@@ -225,4 +226,6 @@ def get_total_saved_count():
     except Exception:
         logger.exception("Database count query failed")
         raise
+
+
 
