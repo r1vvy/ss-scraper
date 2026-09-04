@@ -26,12 +26,23 @@ HEADER_ROW_2 = ["", "", "", "", "", "", "Emils", "Estere", "Emils", "Estere"]
 
 def format_listing_row(item: Dict[str, Any], nr: int) -> List[Any]:
     """Formats listing item dictionary into Google Sheet row values."""
+    from config import extract_number
+
+    price_val = extract_number(item.get("price_monthly"))
+    price = price_val if price_val is not None else item.get("price_monthly", "")
+
+    area_val = extract_number(item.get("area_sqm"))
+    area = area_val if area_val is not None else item.get("area_sqm", "")
+
+    rooms_val = extract_number(item.get("rooms"))
+    rooms = rooms_val if rooms_val is not None else item.get("rooms", "")
+
     return [
         nr,
         item.get("url", ""),
-        item.get("price_monthly", ""),
-        item.get("area_sqm", ""),
-        item.get("rooms", ""),
+        price,
+        area,
+        rooms,
         item.get("address", ""),
         "FALSE",
         "FALSE",
@@ -143,21 +154,10 @@ class GoogleSheetsClient:
             pass
 
         try:
-            # Create worksheet and write initial headers
+            # Create blank worksheet without inserting header rows
             ws = self.spreadsheet.add_worksheet(title=title, rows=100, cols=10)
-            ws.append_row(HEADER_ROW_1, value_input_option="USER_ENTERED")
-            ws.append_row(HEADER_ROW_2, value_input_option="USER_ENTERED")
             self._worksheets_cache[title] = ws
-            logger.info("Created new worksheet tab '%s' with headers.", title)
-
-            # If default "Sheet1" exists and is blank, delete it if there are other sheets
-            try:
-                sheet1 = self.spreadsheet.worksheet("Sheet1")
-                if len(self.spreadsheet.worksheets()) > 1 and len(sheet1.get_all_values()) == 0:
-                    self.spreadsheet.del_worksheet(sheet1)
-            except Exception:
-                pass
-
+            logger.info("Created new worksheet tab '%s'.", title)
             return ws
         except Exception as exc:
             logger.error("Failed to create worksheet tab '%s': %s", title, exc)
@@ -175,10 +175,6 @@ class GoogleSheetsClient:
 
         try:
             all_values = ws.get_all_values()
-            if not all_values:
-                ws.append_row(HEADER_ROW_1, value_input_option="USER_ENTERED")
-                ws.append_row(HEADER_ROW_2, value_input_option="USER_ENTERED")
-                all_values = [HEADER_ROW_1, HEADER_ROW_2]
 
             # Check if URL already exists in this worksheet to avoid duplicates
             url = item.get("url", "").strip()
@@ -188,9 +184,9 @@ class GoogleSheetsClient:
                     logger.debug("Listing url=%s already exists in worksheet '%s'. Skipping duplicate append.", url, ws.title)
                     return True
 
-            # Calculate Nr based on current data rows (excluding 2 header rows)
-            data_row_count = max(0, len(all_values) - 2)
-            nr = data_row_count + 1
+            # Calculate Nr based on existing data rows with numeric IDs
+            data_rows_count = len([r for r in all_values if r and str(r[0]).strip().isdigit()])
+            nr = data_rows_count + 1
 
             row_data = format_listing_row(item, nr)
             ws.append_row(row_data, value_input_option="USER_ENTERED")

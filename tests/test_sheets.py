@@ -26,9 +26,9 @@ def test_format_listing_row_values():
     assert row == [
         1,
         "https://www.ss.com/msg/lv/real-estate/flats/riga/yugla/bpnni.html",
-        "620",
-        "57",
-        "3",
+        620,
+        57,
+        3,
         "Silciema 11",
         "FALSE",
         "FALSE",
@@ -67,7 +67,7 @@ def test_append_to_sheets_unconfigured_does_not_raise():
 def test_google_sheets_client_append_listing_with_mock_gspread():
     mock_ws = MagicMock()
     mock_ws.title = "Yugla"
-    mock_ws.get_all_values.return_value = [HEADER_ROW_1, HEADER_ROW_2]
+    mock_ws.get_all_values.return_value = []
 
     mock_spreadsheet = MagicMock()
     mock_spreadsheet.worksheet.return_value = mock_ws
@@ -93,14 +93,14 @@ def test_google_sheets_client_append_listing_with_mock_gspread():
     result = client.append_listing(item)
 
     assert result is True
-    # Verify calculated Nr is 1 (since get_all_values returned 2 header rows)
+    # Verify calculated Nr is 1
     mock_ws.append_row.assert_called_once_with(
         [
             1,
             "https://www.ss.com/msg/lv/real-estate/flats/riga/yugla/bpnni.html",
-            "620",
-            "57",
-            "3",
+            620,
+            57,
+            3,
             "Silciema 11",
             "FALSE",
             "FALSE",
@@ -111,7 +111,7 @@ def test_google_sheets_client_append_listing_with_mock_gspread():
     )
 
 
-def test_google_sheets_client_creates_worksheet_headers():
+def test_google_sheets_client_creates_blank_worksheet():
     import gspread
 
     mock_spreadsheet = MagicMock()
@@ -119,7 +119,6 @@ def test_google_sheets_client_creates_worksheet_headers():
     mock_ws = MagicMock()
     mock_ws.title = "Centre"
     mock_spreadsheet.add_worksheet.return_value = mock_ws
-    mock_spreadsheet.worksheets.return_value = [mock_ws]
 
     client = GoogleSheetsClient(credentials_json='{"type": "service_account"}')
     client.spreadsheet = mock_spreadsheet
@@ -128,7 +127,5 @@ def test_google_sheets_client_creates_worksheet_headers():
 
     assert ws == mock_ws
     mock_spreadsheet.add_worksheet.assert_called_once_with(title="Centre", rows=100, cols=10)
-    assert mock_ws.append_row.call_count == 2
-    mock_ws.append_row.assert_any_call(HEADER_ROW_1, value_input_option="USER_ENTERED")
-    mock_ws.append_row.assert_any_call(HEADER_ROW_2, value_input_option="USER_ENTERED")
+    assert mock_ws.append_row.call_count == 0
 

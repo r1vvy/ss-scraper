@@ -303,7 +303,8 @@ def extract_number(val):
     match = re.search(r"[-+]?\d*\.?\d+", cleaned)
     if match:
         try:
-            return float(match.group(0))
+            val_num = float(match.group(0))
+            return int(val_num) if val_num.is_integer() else val_num
         except ValueError:
             return None
     return None
